@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 
-const VIEWS = ['front', 'back', 'sleeve', 'neck'];
+const VIEWS = ['front', 'back', 'rightSleeve', 'leftSleeve'];
 
 function ViewLabel(v) {
-  return { front: 'Front', back: 'Back', sleeve: 'Sleeve', neck: 'Neck Label' }[v] || v;
+  return { front: 'Front', back: 'Back', rightSleeve: 'R. Sleeve', leftSleeve: 'L. Sleeve' }[v] || v;
 }
 
 // Realistic product SVG for detail view
@@ -44,10 +44,10 @@ function ProductView({ product, category, color, view }) {
 
   // Print area per view
   const printAreas = {
-    front: { x: 95, y: 110, w: 110, h: 120 },
-    back: { x: 95, y: 110, w: 110, h: 120 },
-    sleeve: { x: 22, y: 28, w: 38, h: 60 },
-    neck: { x: 118, y: 42, w: 64, h: 28 },
+    front:       { x: 95,  y: 110, w: 110, h: 120 },
+    back:        { x: 95,  y: 110, w: 110, h: 120 },
+    rightSleeve: { x: 22,  y: 28,  w: 38,  h: 60  },
+    leftSleeve:  { x: 240, y: 28,  w: 38,  h: 60  },
   };
   const pa = printAreas[view] || printAreas.front;
 

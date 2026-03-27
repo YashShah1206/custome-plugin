@@ -71,14 +71,21 @@ function Shirt({ color, canvasDataUrl, activeView }) {
           scale: 0.25,
         };
 
-      case 'sleeve':
+      case 'rightSleeve':
         return {
           pos: [decalZ * 0.7, decalY + 0.1, 0],
           rot: [0, Math.PI / 2, 0],
           scale: 0.12,
         };
 
-      default:
+      case 'leftSleeve':
+        return {
+          pos: [-decalZ * 0.7, decalY + 0.1, 0],
+          rot: [0, -Math.PI / 2, 0],
+          scale: 0.12,
+        };
+
+      default: // front
         return {
           pos: [0, decalY, decalZ],
           rot: [0, 0, 0],
@@ -124,17 +131,22 @@ function Shirt({ color, canvasDataUrl, activeView }) {
 /* ─────────────────────────────────────────────────────────────
    ✅ VIEW ROTATOR (SMOOTH & HIDES 2D LAYER ON ROTATE)
 ───────────────────────────────────────────────────────────── */
-function ViewRotator({ view, controlsRef, overlayRef, isDraggingRef }) {
+function ViewRotator({ view, controlsRef, overlayRef, isDraggingRef, mouseRef }) {
   const targetAngle = useRef(0);
 
   useEffect(() => {
+    // Model's front face points toward -X axis, so:
+    //   front  = +π/2  (camera looks from -X side)
+    //   back   = -π/2  (camera looks from +X side)
+    //   sleeve = 0     (camera looks from +Z side)
+    //   neck   = +π/2  (same as front)
     const angles = {
-      front: 0,
-      back: Math.PI,
-      sleeve: -Math.PI / 2,
-      neck: 0
+      front:        Math.PI / 2.25,
+      back:         -Math.PI / 1.75,
+      rightSleeve:  0,           // camera from +Z → looks at right sleeve
+      leftSleeve:   Math.PI,     // camera from -Z → looks at left sleeve
     };
-    targetAngle.current = angles[view] ?? 0;
+    targetAngle.current = angles[view] ?? Math.PI / 2.25;
   }, [view]);
 
   useFrame(() => {
@@ -150,8 +162,30 @@ function ViewRotator({ view, controlsRef, overlayRef, isDraggingRef }) {
 
     const isDragging = isDraggingRef?.current;
 
-    // Smoothly return to the target view ONLY if the user isn't actively dragging
-    if (!isDragging && Math.abs(diff) > 0.01) {
+    // Mouse parallax nudge (only when snapped close to target and not dragging)
+    const mx = mouseRef?.current?.x ?? 0; // -1 to +1
+    const my = mouseRef?.current?.y ?? 0; // -1 to +1
+    const MAX_AZ = 0.21;  // ~12° horizontal parallax
+    const MAX_PO = 0.10;  // ~6° vertical parallax
+
+    if (!isDragging && Math.abs(diff) < 0.25) {
+      // Near the target — apply smooth parallax on top
+      const azTarget = target + mx * MAX_AZ;
+      let azDiff = azTarget - current;
+      while (azDiff > Math.PI) azDiff -= 2 * Math.PI;
+      while (azDiff < -Math.PI) azDiff += 2 * Math.PI;
+      const newAz = current + azDiff * 0.06;
+      controls.setAzimuthalAngle(newAz);
+
+      // Polar (vertical tilt) — default polar is π/2 (horizontal)
+      const curPolar = controls.getPolarAngle();
+      const polTarget = Math.PI / 2 - my * MAX_PO;
+      const newPolar = curPolar + (polTarget - curPolar) * 0.06;
+      controls.setPolarAngle(newPolar);
+
+      controls.update();
+    } else if (!isDragging && Math.abs(diff) > 0.01) {
+      // Still transitioning to target view — snap without parallax
       const newAngle = current + diff * 0.08;
       controls.setAzimuthalAngle(newAngle);
       controls.update();
@@ -191,8 +225,22 @@ export default function CanvasArea() {
   const isDraggingRef = useRef(false);
   const [initialized, setInitialized] = useState(false);
   const controlsRef = useRef(null);
+  // Normalized mouse position (-1 to +1) relative to the canvas wrapper
+  const mouseRef = useRef({ x: 0, y: 0 });
 
   const activeBox = PRINT_AREAS[activeView] || PRINT_AREAS.front;
+
+  // Track mouse over the 3D wrapper to drive parallax rotation
+  const handleMouseMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;  // -1 left → +1 right
+    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1; // -1 bottom → +1 top
+    mouseRef.current = { x, y };
+  };
+
+  const handleMouseLeave = () => {
+    mouseRef.current = { x: 0, y: 0 };
+  };
 
   /* ✅ Fabric Canvas */
   useEffect(() => {
@@ -248,69 +296,84 @@ export default function CanvasArea() {
   const cssClipPath = `inset(${insetTop}px ${insetRight}px ${insetBottom}px ${insetLeft}px)`;
 
   return (
-    <div className="cpd-canvas-area">
+    <div
+      className="cpd-canvas-area"
+      style={{ position: 'relative' }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+    >
+      {/* ── 3D Scene: fills entire cpd-canvas-area, never clipped ── */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
+        <Canvas
+          shadows
+          camera={{ position: [-2.5, 0.1, 0], fov: 40 }}
+        >
+          <ambientLight intensity={0.6} />
+
+          <directionalLight
+            position={[3, 8, 6]}
+            intensity={1.8}
+            castShadow
+          />
+
+          <Suspense fallback={<Html center>Loading...</Html>}>
+            <Center>
+              <Shirt
+                color={productColor.hex}
+                canvasDataUrl={canvasThumbnails[activeView]}
+                activeView={activeView}
+              />
+            </Center>
+
+            <Environment preset="studio" />
+
+            <ContactShadows
+              position={[0, -0.6, 0]}
+              opacity={0.5}
+              scale={10}
+              blur={2}
+            />
+          </Suspense>
+
+          <OrbitControls
+            ref={controlsRef}
+            target={[0.15, 0.3, 0]}
+            enablePan={false}
+            enableZoom
+            enableDamping
+            onStart={() => { isDraggingRef.current = true; }}
+            onEnd={() => { isDraggingRef.current = false; }}
+          />
+
+          <ViewRotator view={activeView} controlsRef={controlsRef} overlayRef={overlayRef} isDraggingRef={isDraggingRef} mouseRef={mouseRef} />
+        </Canvas>
+      </div>
+
+      {/* ── 2D Design layer: centered 340×440, sits above 3D ── */}
       <div
         style={{
           position: 'relative',
           width: 340,
           height: 440,
           transform: `scale(${zoom})`,
+          zIndex: 10,
+          pointerEvents: 'none', // let 3D orbit capture mouse by default
         }}
       >
-        {/* 3D Scene */}
-        <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
-          <Canvas
-            shadows
-            camera={{ position: [0, 0.2, 2.5], fov: 40 }}
-          >
-            <ambientLight intensity={0.6} />
-
-            <directionalLight
-              position={[3, 8, 6]}
-              intensity={1.8}
-              castShadow
-            />
-
-            <Suspense fallback={<Html center>Loading...</Html>}>
-              <Center>
-                <Shirt
-                  color={productColor.hex}
-                  canvasDataUrl={canvasThumbnails[activeView]}
-                  activeView={activeView}
-                />
-              </Center>
-
-              <Environment preset="studio" />
-
-              <ContactShadows
-                position={[0, -0.6, 0]}
-                opacity={0.5}
-                scale={10}
-                blur={2}
-              />
-            </Suspense>
-
-            {/* ✅ FIXED CONTROLS */}
-            <OrbitControls
-              ref={controlsRef}
-              target={[0, 0.3, 0]} // 🔥 IMPORTANT FIX
-              enablePan={false}
-              enableZoom
-              enableDamping
-              onStart={() => { isDraggingRef.current = true; }}
-              onEnd={() => { isDraggingRef.current = false; }}
-            />
-
-            <ViewRotator view={activeView} controlsRef={controlsRef} overlayRef={overlayRef} isDraggingRef={isDraggingRef} />
-          </Canvas>
+        {/* Fabric canvas – pointer events only inside the print area */}
+        <div
+          ref={overlayRef}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            clipPath: cssClipPath,
+            pointerEvents: 'auto',
+          }}
+        >
+          <canvas ref={canvasElRef} style={{ background: 'transparent' }} />
         </div>
 
-        {/* 2D Canvas */}
-        <div ref={overlayRef} style={{ position: 'absolute', inset: 0, zIndex: 10, clipPath: cssClipPath }}>
-          <canvas ref={canvasElRef} />
-        </div>
-
-        {/* Print Area */}
+        {/* Print Area dashed border */}
         <div
           style={{
             position: 'absolute',
@@ -318,7 +381,9 @@ export default function CanvasArea() {
             top: activeBox.top,
             width: activeBox.width,
             height: activeBox.height,
-            border: '2px dashed blue',
+            border: '2px dashed rgba(67,97,238,0.7)',
+            borderRadius: 4,
+            pointerEvents: 'none',
           }}
         />
       </div>

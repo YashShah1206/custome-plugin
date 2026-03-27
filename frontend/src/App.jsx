@@ -33,10 +33,10 @@ const SIZES = ['YS', 'YM', 'YL', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'
 
 // Print areas per view — used for clipping
 export const PRINT_AREAS = {
-  front:  { left: 60, top: 55, width: 220, height: 360 },
-  back:   { left: 60, top: 55, width: 220, height: 360 },
-  sleeve: { left: 90, top: 80, width: 160, height: 250 },
-  neck:   { left: 70, top: 45, width: 200, height: 130 },
+  front: { left: -10, top: 55, width: 300, height: 550 },
+  back: { left: 10, top: 0, width: 400, height: 575 },
+  rightSleeve: { left: -70, top: 60, width: 160, height: 300 },
+  leftSleeve: { left: 175, top: 40, width: 160, height: 300 },
 };
 
 export function calcPrice(itemCount) {
@@ -59,11 +59,11 @@ function App() {
 
   // Per-view canvas states (JSON strings)
   const [canvasStates, setCanvasStates] = useState({
-    front: null, back: null, sleeve: null, neck: null,
+    front: null, back: null, rightSleeve: null, leftSleeve: null,
   });
   // Per-view thumbnails for 3D decal
   const [canvasThumbnails, setCanvasThumbnails] = useState({
-    front: null, back: null, sleeve: null, neck: null,
+    front: null, back: null, rightSleeve: null, leftSleeve: null,
   });
 
   const [namesNumbers, setNamesNumbers] = useState([]);
@@ -80,10 +80,10 @@ function App() {
 
   // Per-view history
   const [histories, setHistories] = useState({
-    front: [], back: [], sleeve: [], neck: [],
+    front: [], back: [], rightSleeve: [], leftSleeve: [],
   });
   const [historyIndexes, setHistoryIndexes] = useState({
-    front: -1, back: -1, sleeve: -1, neck: -1,
+    front: -1, back: -1, rightSleeve: -1, leftSleeve: -1,
   });
 
   const [zoom, setZoom] = useState(1);
@@ -218,10 +218,10 @@ function App() {
     setCustomizationCount(0);
     setActivePanel('upload');
     setActiveView('front');
-    setCanvasStates({ front: null, back: null, sleeve: null, neck: null });
-    setCanvasThumbnails({ front: null, back: null, sleeve: null, neck: null });
-    setHistories({ front: [], back: [], sleeve: [], neck: [] });
-    setHistoryIndexes({ front: -1, back: -1, sleeve: -1, neck: -1 });
+    setCanvasStates({ front: null, back: null, rightSleeve: null, leftSleeve: null });
+    setCanvasThumbnails({ front: null, back: null, rightSleeve: null, leftSleeve: null });
+    setHistories({ front: [], back: [], rightSleeve: [], leftSleeve: [] });
+    setHistoryIndexes({ front: -1, back: -1, rightSleeve: -1, leftSleeve: -1 });
     setNamesNumbers([]);
     setScreen('designer');
   };

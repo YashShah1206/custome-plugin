@@ -2,10 +2,10 @@ import React, { useContext } from 'react';
 import { DesignContext } from '../App';
 
 const views = [
-  { id: 'front', label: 'Front' },
-  { id: 'back', label: 'Back' },
-  { id: 'sleeve', label: 'Sleeve' },
-  { id: 'neck', label: 'Neck' },
+  { id: 'front',        label: 'Front' },
+  { id: 'back',         label: 'Back' },
+  { id: 'rightSleeve', label: 'R. Sleeve' },
+  { id: 'leftSleeve',  label: 'L. Sleeve' },
 ];
 
 function ProductThumb({ color, view }) {
@@ -26,8 +26,10 @@ function ProductThumb({ color, view }) {
       />
       <path d="M 18 6 Q 25 12 32 6 Q 28 10 25 11 Q 22 10 18 6" fill="#00000012"/>
       {isBack && <line x1="25" y1="8" x2="25" y2="54" stroke="#00000010" strokeWidth="0.8"/>}
-      {view === 'sleeve' && <rect x="2" y="8" width="10" height="12" rx="1" fill="none" stroke="#4361ee" strokeWidth="0.8" strokeDasharray="2,1"/>}
-      {view === 'neck' && <path d="M 18 6 Q 25 14 32 6" fill="none" stroke="#4361ee" strokeWidth="0.8" strokeDasharray="2,1"/>}
+      {/* Right sleeve highlight (left side of SVG) */}
+      {view === 'rightSleeve' && <path d="M 12 1 L 1 12 L 8 19 L 12 15" fill="none" stroke="#4361ee" strokeWidth="1.2" strokeDasharray="2,1"/>}
+      {/* Left sleeve highlight (right side of SVG) */}
+      {view === 'leftSleeve'  && <path d="M 38 1 L 49 12 L 42 19 L 38 15" fill="none" stroke="#4361ee" strokeWidth="1.2" strokeDasharray="2,1"/>}
     </svg>
   );
 }

@@ -1,0 +1,68 @@
+# ─────────────────────────────────────────
+#  T-Shirt Plugin — .gitignore
+# ─────────────────────────────────────────
+
+# ── Node / Frontend ──────────────────────
+frontend/node_modules/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Vite build output
+frontend/dist/
+dist/
+
+# Vite cache
+frontend/.vite/
+.vite/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# ── WordPress / Plugin ───────────────────
+# Compiled/minified plugin build output
+build/assets/
+build/*.map
+
+# WordPress core (if accidentally placed here)
+wp-config.php
+wp-content/uploads/
+
+# ── Scratch / fetch scripts ──────────────
+frontend/fetch_*.cjs
+
+# ── OS files ─────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# ── IDE / Editor ─────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+
+# ── Logs & temp ──────────────────────────
+*.log
+*.tmp
+*.temp
+.cache/
+
+# ── Package manager locks (keep one) ─────
+# Uncomment the one you DON'T use:
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

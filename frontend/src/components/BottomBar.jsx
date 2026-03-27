@@ -113,7 +113,7 @@ export default function BottomBar() {
     setSaving(true);
 
     try {
-      const views = ['front', 'back', 'sleeve'];
+      const views = ['front', 'back', 'rightSleeve', 'leftSleeve'];
       const images = {};
       const originalView = activeView;
 
