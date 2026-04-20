@@ -2,54 +2,6 @@ import React, { useContext, useState, useCallback } from 'react';
 import { DesignContext, calcPrice } from '../App';
 import * as htmlToImage from 'html-to-image';
 
-function PriceModal({ onClose, onAddToCart, price, itemCount }) {
-  return (
-    <div className="cpd-modal-overlay" onClick={onClose}>
-      <div className="cpd-price-modal" onClick={e => e.stopPropagation()}>
-        <button className="cpd-modal-close" onClick={onClose}>✕</button>
-        <h2>Your Price Breakdown</h2>
-
-        <div className="cpd-price-breakdown">
-          <div className="cpd-price-row-item">
-            <span>Base Price (1 item)</span>
-            <span>$25.00</span>
-          </div>
-          {itemCount > 5 && itemCount <= 10 && (
-            <div className="cpd-price-row-item cpd-price-surcharge">
-              <span>Customization surcharge (6–10 items)</span>
-              <span>+$5.00</span>
-            </div>
-          )}
-          {itemCount > 10 && (
-            <div className="cpd-price-row-item cpd-price-surcharge">
-              <span>Customization surcharge (&gt;10 items)</span>
-              <span>+$10.00</span>
-            </div>
-          )}
-          <div className="cpd-price-row-item cpd-price-total">
-            <span>Total</span>
-            <span>${price.toFixed(2)}</span>
-          </div>
-        </div>
-
-        <div className="cpd-price-items-note">
-          {itemCount} customization item{itemCount !== 1 ? 's' : ''} added
-          {itemCount <= 5 && <span> — Add more for premium options</span>}
-        </div>
-
-        <div className="cpd-price-modal-actions">
-          <button className="cpd-add-to-cart-btn" onClick={onAddToCart}>
-            🛒 Add to Cart — ${price.toFixed(2)}
-          </button>
-          <button className="cpd-continue-btn" onClick={onClose}>
-            Continue Designing
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function TshirtThumbSmall({ color }) {
   return (
     <svg viewBox="0 0 40 48" width="36" height="36">
@@ -66,25 +18,127 @@ function TshirtThumbSmall({ color }) {
 // Helper: wait ms
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
+/**
+ * Extract design metadata from a specific canvas instance for a specific view.
+ */
+function extractViewMetadata(canvas, viewKey, results, fontsSet, imagesSet) {
+  if (!canvas || !results.views[viewKey]) return;
+  const cmRatio = 0.145; 
+
+  const objects = canvas.getObjects();
+  objects.forEach(obj => {
+    // Text objects
+    if (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox') {
+      if (obj.fontFamily) fontsSet.add(obj.fontFamily);
+      const textContent = obj.text || '';
+      if (textContent.trim()) {
+        const itemType = obj.data?.type || 'text';
+        results.views[viewKey].text.push({
+          font: obj.fontFamily || 'Inter',
+          text: textContent,
+          fontSize: obj.fontSize || 30,
+          color: obj.fill || '#ffffff',
+          dimensions: `${(obj.width * obj.scaleX * cmRatio).toFixed(1)}cm x ${(obj.height * obj.scaleY * cmRatio).toFixed(1)}cm`,
+          type: itemType,
+        });
+      }
+    }
+
+    // Groups (Curved Text, Icons)
+    if (obj.type === 'group') {
+      if (obj.data?.type === 'curved-text' && obj.data?.originalText) {
+        const firstChild = obj.objects?.[0] || obj._objects?.[0] || {};
+        const fontName = firstChild.fontFamily || 'Inter';
+        fontsSet.add(fontName);
+        results.views[viewKey].text.push({
+          font: fontName,
+          text: obj.data.originalText,
+          fontSize: firstChild.fontSize || 30,
+          color: firstChild.fill || '#ffffff',
+          dimensions: `${(obj.width * obj.scaleX * cmRatio).toFixed(1)}cm x ${(obj.height * obj.scaleY * cmRatio).toFixed(1)}cm`,
+          type: 'curved-text',
+        });
+      } else if (obj.data?.type === 'artwork' && obj.data?.artName) {
+        const iconName = obj.data.artName.includes('(') ? obj.data.artName : `${obj.data.artCategory || 'Artwork'} (${obj.data.artName})`;
+        results.views[viewKey].art.push({
+          name: iconName,
+          category: obj.data.artCategory || '',
+          dimensions: `${(obj.width * obj.scaleX * cmRatio).toFixed(1)}cm x ${(obj.height * obj.scaleY * cmRatio).toFixed(1)}cm`,
+        });
+      }
+      if (obj.objects || obj._objects) {
+        (obj.objects || obj._objects).forEach(child => {
+          if (child.fontFamily) fontsSet.add(child.fontFamily);
+        });
+      }
+    }
+
+    // Images (Already broad, but ensure it's checked)
+    if (obj.type === 'image') {
+      const dimensions = `${(obj.width * obj.scaleX * cmRatio).toFixed(1)}cm x ${(obj.height * obj.scaleY * cmRatio).toFixed(1)}cm`;
+      if (obj.data?.wpUrl) {
+        imagesSet.add(JSON.stringify({ url: obj.data.wpUrl, dimensions }));
+      } else if (obj.src && !obj.src.startsWith('data:')) {
+        imagesSet.add(JSON.stringify({ url: obj.src, dimensions }));
+      } else if (obj._element?.src && !obj._element.src.startsWith('data:')) {
+        imagesSet.add(JSON.stringify({ url: obj._element.src, dimensions }));
+      }
+    }
+
+    // Catch-All: If an object was not caught by text/art/image but is visible
+    const alreadyCaught = results.views[viewKey].text.some(t => t._ref === obj) || 
+                          results.views[viewKey].art.some(a => a._ref === obj);
+    
+    if (!alreadyCaught && obj.type !== 'image' && obj.opacity !== 0 && obj.visible) {
+      // Don't count the print boundary or clip path
+      if (obj.className === 'cpd-print-bounds' || obj.data?.type === 'clip-path') return;
+
+      results.views[viewKey].art.push({
+        name: obj.data?.artName || `${obj.type.charAt(0).toUpperCase() + obj.type.slice(1)} Element`,
+        category: obj.data?.artCategory || 'Shape',
+        dimensions: `${(obj.width * obj.scaleX * cmRatio).toFixed(1)}cm x ${(obj.height * obj.scaleY * cmRatio).toFixed(1)}cm`,
+      });
+    }
+  });
+}
+
 export default function BottomBar() {
   const {
     productColor, canvasRef, canvasStates, namesNumbers, namesConfig,
     customizationCount, selectedProduct, screen, setScreen,
-    setActiveView, activeView, canvasThumbnails,
+    setActiveView, activeView, canvasThumbnails, sizesQuantities, customerNotes,
   } = useContext(DesignContext);
 
+  // Persistence: ensure productId is remembered even if URL changes
+  const baseWpData = typeof window !== 'undefined' ? window.cpdData : {};
+  let currentProductId = baseWpData?.productId || 0;
+
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      if (currentProductId > 0) {
+        window.sessionStorage.setItem('cpd_persistent_product_id', currentProductId.toString());
+      } else {
+        const persistedId = window.sessionStorage.getItem('cpd_persistent_product_id');
+        if (persistedId) currentProductId = parseInt(persistedId);
+      }
+    } catch (e) {
+      console.warn('CPD: Session storage not available', e);
+    }
+  }
+
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [savedDesignId, setSavedDesignId] = useState(null);
   const [toast, setToast] = useState(null);
-  const [showPriceModal, setShowPriceModal] = useState(false);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
 
-  const price = calcPrice(customizationCount);
+  const price = calcPrice(customizationCount, selectedProduct?.price || 25);
 
-  // Capture a single view as PNG data URL
+  // Capture a single view as PNG data URL using html-to-image to include the background
   const captureView = useCallback(async () => {
     const exportNode = document.querySelector('.cpd-scene-export') || document.querySelector('.cpd-canvas-area');
     if (!exportNode) throw new Error('Could not find canvas area to export.');
@@ -94,7 +148,7 @@ export default function BottomBar() {
       canvasRef.current.discardActiveObject().renderAll();
     }
 
-    // Small delay for 3D render to settle
+    // Small delay for render to settle
     await wait(300);
 
     return htmlToImage.toPng(exportNode, {
@@ -107,8 +161,8 @@ export default function BottomBar() {
     });
   }, [canvasRef]);
 
-  // Save all 3 views
-  const handleSave = async () => {
+  // Save all views and Add to Cart
+  const handleSaveAndCart = async () => {
     if (!canvasRef.current) return;
     setSaving(true);
 
@@ -117,60 +171,85 @@ export default function BottomBar() {
       const images = {};
       const originalView = activeView;
 
-      // Save current canvas state
-      if (canvasRef.current) {
-        canvasRef.current.discardActiveObject().renderAll();
-      }
+      // Metadata collection structure
+      const metadata = {
+        views: {
+          front: { text: [], art: [] },
+          back: { text: [], art: [] },
+          rightSleeve: { text: [], art: [] },
+          leftSleeve: { text: [], art: [] },
+        },
+        fonts: new Set(),
+        images: new Set()
+      };
 
       for (const view of views) {
-        // Switch view
-        setActiveView(view);
-        await wait(600); // Wait for view switch + 3D camera animation
+        // Switch view and wait for it to be ready
+        await setActiveView(view);
+        
+        // Increased buffer to ensure images/fonts are fully painted
+        await wait(500);
 
-        // Capture
-        const dataUrl = await captureView();
-        images[view] = dataUrl;
+        // Capture Thumbnail
+        images[view] = await captureView();
+
+        // Capture Live Metadata from this view's canvas
+        if (canvasRef.current) {
+          extractViewMetadata(canvasRef.current, view, metadata, metadata.fonts, metadata.images);
+        }
       }
 
-      // Switch back to original view
-      setActiveView(originalView);
+      // Switch back to original view and wait for it to finish
+      await setActiveView(originalView);
 
-      const wpData = typeof window !== 'undefined' && window.cpdData;
+      const currentWpData = typeof window !== 'undefined' ? window.cpdData : {};
 
-      if (wpData && wpData.restUrl) {
+      let designId = null;
+      let imageUrls = {};
+
+      if (currentWpData && currentWpData.restUrl) {
         // Send all images to WordPress
-        const response = await fetch(wpData.restUrl + 'save-image', {
+        const response = await fetch(currentWpData.restUrl + 'save-image', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-WP-Nonce': wpData.nonce,
+            'X-WP-Nonce': currentWpData.nonce,
           },
           body: JSON.stringify({
             images: images,
+            product_id: selectedProduct?.id || 0,
             product_color: productColor.hex,
             product_name: selectedProduct?.name || 'Custom Product',
             product_type: selectedProduct?.category?.id || 'tshirt',
             names_numbers: { config: namesConfig, entries: namesNumbers },
+            sizes_quantities: sizesQuantities,
             total_price: price,
+            customer_notes: customerNotes,
+            fonts_used: Array.from(metadata.fonts),
+            images_used: Array.from(metadata.images).map(str => {
+              try { return JSON.parse(str); } catch(e) { return { url: str, dimensions: '' }; }
+            }),
+            text_content: metadata.views, // Use the grouped views structure
+            artworks_used: metadata.views, // Same grouped structure for artworks
           }),
         });
 
         const result = await response.json();
         if (result.success) {
-          showToast(`✓ Design saved! ${Object.keys(images).length} views captured.`, 'success');
+          designId = result.id;
+          imageUrls = result.file_urls || {};
+          
+          // Store the designId for redirection later
+          setSavedDesignId(designId);
+          setSaved(true);
+          showToast(`✓ Design saved! Now you can go to cart.`, 'success');
         } else {
-          showToast('Failed to save design on server', 'error');
+          showToast('Failed to save: ' + (result.message || 'Server error'), 'error');
         }
       } else {
-        // Standalone mode — download all PNGs
-        for (const [view, dataUrl] of Object.entries(images)) {
-          const link = document.createElement('a');
-          link.href = dataUrl;
-          link.download = `design-${view}-${Date.now()}.png`;
-          link.click();
-          await wait(200); // Slight delay between downloads
-        }
-        showToast(`✓ ${Object.keys(images).length} design views downloaded!`, 'success');
+        // Standalone mode / Dev Mode — simply simulate success
+        setSaved(true);
+        showToast(`✓ Dev Mode: Design saved!`, 'success');
       }
     } catch (error) {
       console.error('Save error:', error);
@@ -180,64 +259,65 @@ export default function BottomBar() {
     }
   };
 
-  const handleAddToCart = async () => {
-    setShowPriceModal(false);
-    const wpData = typeof window !== 'undefined' && window.cpdData;
+  // Classic WooCommerce AJAX add-to-cart (fallback)
+  const classicAddToCart = async (productId, designId, quantity) => {
+    const formData = new FormData();
+    formData.append('product_id', productId); // standard AJAX param
+    formData.append('quantity', quantity);
+    formData.append('cpd_design_id', designId);
 
-    if (wpData && wpData.wcAddToCartUrl) {
-      try {
-        const canvas = canvasRef.current;
-        const dataUrl = canvas ? canvas.toDataURL({ format: 'jpeg', quality: 0.8 }) : '';
+    // Using the standard WooCommerce AJAX endpoint which is more reliable across themes
+    const ajaxUrl = wpData?.homeUrl 
+      ? (wpData.homeUrl.endsWith('/') ? wpData.homeUrl : wpData.homeUrl + '/') + '?wc-ajax=add_to_cart'
+      : window.location.origin + '/?wc-ajax=add_to_cart';
 
-        const response = await fetch(wpData.wcAddToCartUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-WP-Nonce': wpData.nonce,
-          },
-          body: JSON.stringify({
-            product_id: wpData.productId || 0,
-            quantity: 1,
-            price: price,
-            design_thumbnail: dataUrl,
-            product_color: productColor.hex,
-            product_name: selectedProduct?.name || 'Custom Product',
-          }),
-        });
+    await fetch(ajaxUrl, {
+      method: 'POST',
+      body: formData,
+      credentials: 'same-origin',
+    });
+  };
 
-        const result = await response.json();
-        if (result.success || result.cart_item_key) {
-          showToast('✓ Added to cart!', 'success');
-          if (wpData.cartUrl) {
-            setTimeout(() => { window.location.href = wpData.cartUrl; }, 1500);
-          }
-        } else {
-          showToast('Could not add to cart. Please try again.', 'error');
-        }
-      } catch (e) {
-        showToast('Cart error: ' + e.message, 'error');
-      }
+  const goToCart = () => {
+    const finalWpData = typeof window !== 'undefined' ? window.cpdData : {};
+
+    // Get the product ID (from localized data or session persistence)
+    const finalProductId = currentProductId > 0 ? currentProductId : (finalWpData?.productId || 0);
+
+    if (finalProductId > 0 && savedDesignId) {
+      const totalQty = Object.values(sizesQuantities).reduce((a, b) => a + (parseInt(b) || 0), 0) || 1;
+
+      // Build the trampoline URL — our PHP handler intercepts this,
+      // calls WC()->cart->add_to_cart() directly, then redirects to the clean cart page.
+      const homeUrl = finalWpData?.homeUrl || window.location.origin + '/';
+      const trampolineUrl = `${homeUrl}?cpd_add_to_cart=${finalProductId}&cpd_design_id=${savedDesignId}&quantity=${Math.max(1, totalQty)}`;
+
+      window.location.href = trampolineUrl;
     } else {
-      handleSave();
-      showToast(`✓ Order placed! Total: $${price.toFixed(2)}. We'll contact you shortly.`, 'success');
+      // Fallback: just go to cart page
+      const cartUrl = finalWpData?.cartUrl || (finalWpData?.homeUrl || window.location.origin + '/') + 'cart/';
+      window.location.href = cartUrl;
     }
+  };
+
+
+  const handleEditAgain = () => {
+    setSaved(false);
   };
 
   return (
     <>
-      {showPriceModal && (
-        <PriceModal
-          price={price}
-          itemCount={customizationCount}
-          onClose={() => setShowPriceModal(false)}
-          onAddToCart={handleAddToCart}
-        />
-      )}
-
       <div className="cpd-bottom-bar">
         <div className="cpd-bottom-left">
-          <button className="cpd-back-catalog-btn" onClick={() => setScreen('catalog')}>
-            ← Products
+          <button className="cpd-back-catalog-btn" onClick={() => {
+            const wpData = typeof window !== 'undefined' && window.cpdData;
+            if (wpData && wpData.productId) {
+               window.location.href = `/?p=${wpData.productId}`;
+            } else {
+               setScreen('catalog');
+            }
+          }}>
+            ← Back
           </button>
 
           <div className="cpd-product-info">
@@ -247,12 +327,6 @@ export default function BottomBar() {
             <div className="cpd-product-meta">
               <h4>
                 {selectedProduct?.name || 'Custom T-Shirt'}
-                <button
-                  className="cpd-change-link"
-                  onClick={() => setScreen(selectedProduct ? 'detail' : 'catalog')}
-                >
-                  Change Product
-                </button>
               </h4>
               <p>
                 <span className="cpd-color-dot" style={{ backgroundColor: productColor.hex }} />
@@ -269,22 +343,47 @@ export default function BottomBar() {
         </div>
 
         <div className="cpd-bottom-right">
-          <button className="cpd-save-btn" onClick={handleSave} disabled={saving}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
-            </svg>
-            {saving ? 'Saving All Views...' : 'Save All Views'}
-          </button>
-
-          <button className="cpd-price-btn" onClick={() => setShowPriceModal(true)}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="1" x2="12" y2="23" />
-              <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-            </svg>
-            Get Price — ${price.toFixed(2)}
-          </button>
+          {!saved ? (
+             <button
+               className="cpd-price-btn cpd-save-cart-btn"
+               onClick={handleSaveAndCart}
+               disabled={saving}
+             >
+               {saving ? (
+                 <>
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}>
+                     <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                   </svg>
+                   Saving & Adding to Cart...
+                 </>
+               ) : (
+                 <>
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}>
+                     <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                     <path d="M1 1h4l2.68 13.39a2 2 0 001.98 1.61H19a2 2 0 001.96-1.61L23 6H6"/>
+                   </svg>
+                   Save & Add to Cart — ${Number(price).toFixed(2)}
+                 </>
+               )}
+             </button>
+          ) : (
+             <div className="cpd-saved-actions" style={{ display: 'flex', gap: '10px' }}>
+               <button className="cpd-save-btn cpd-edit-design-btn" onClick={handleEditAgain}>
+                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}>
+                   <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                   <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                 </svg>
+                 Edit Design
+               </button>
+               <button className="cpd-price-btn cpd-goto-cart-btn" onClick={goToCart}>
+                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}>
+                   <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                   <path d="M1 1h4l2.68 13.39a2 2 0 001.98 1.61H19a2 2 0 001.96-1.61L23 6H6"/>
+                 </svg>
+                 Go to Cart
+               </button>
+             </div>
+          )}
         </div>
       </div>
 

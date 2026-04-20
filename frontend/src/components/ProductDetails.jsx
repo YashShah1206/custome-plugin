@@ -2,7 +2,7 @@ import React, { useContext, useState } from 'react';
 import { DesignContext } from '../App';
 
 function ProductDetails() {
-  const { productColor, setProductColor, PRODUCT_COLORS, SIZES } = useContext(DesignContext);
+  const { productColor, setProductColor, PRODUCT_COLORS, SIZES, sizesQuantities, setSizesQuantities } = useContext(DesignContext);
   const [showCustomColor, setShowCustomColor] = useState(false);
 
   const isLight = (hex) => {
@@ -18,77 +18,79 @@ function ProductDetails() {
   };
 
   return (
-    <div>
+    <div className="cpd-product-details-inner">
       <div className="cpd-detail-section">
-        <div className="cpd-detail-row">
-          <span className="cpd-detail-label">Decoration Method:</span>
-          <span className="cpd-detail-value">
-            <span style={{ color: '#e63946' }}>🎨</span> Printed
-          </span>
+        <label>Selected Product Color</label>
+        <div className="cpd-color-name-badge">
+          <span className="cpd-color-dot" style={{ backgroundColor: productColor.hex }} />
+          <strong>{productColor.name}</strong>
         </div>
-      </div>
-
-      <div className="cpd-detail-section">
-        <h4>Product Colors:</h4>
+        
         <div className="cpd-product-colors">
           {PRODUCT_COLORS.map((color) => (
             <button
               key={color.hex}
-              className={`cpd-product-color-btn ${productColor.hex === color.hex ? 'active' : ''} ${isLight(color.hex) ? 'light' : 'dark'}`}
+              className={`cpd-product-color-btn ${productColor.hex === color.hex ? 'active' : ''}`}
               style={{ backgroundColor: color.hex }}
               onClick={() => setProductColor(color)}
               title={color.name}
             />
           ))}
+          <button
+            className={`cpd-product-color-btn cpd-btn-custom ${showCustomColor ? 'active' : ''}`}
+            onClick={() => setShowCustomColor(!showCustomColor)}
+            title="Custom Color"
+          >
+            +
+          </button>
         </div>
 
-        <button
-          className="cpd-pick-color-link"
-          onClick={() => setShowCustomColor(!showCustomColor)}
-        >
-          🎨 Pick another color
-        </button>
-
         {showCustomColor && (
-          <div className="cpd-custom-color-picker">
+          <div className="cpd-custom-color-picker-wrap">
             <input
               type="color"
               className="cpd-custom-color-input"
               value={productColor.hex}
               onChange={handleCustomColor}
             />
+            <span>Pick Custom Hex</span>
           </div>
         )}
       </div>
 
       <div className="cpd-detail-section">
-        <div className="cpd-sizes-wrap">
-          <h4>
-            Sizes Available in:
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              marginLeft: '8px',
-              fontWeight: 400,
-              fontSize: '13px'
-            }}>
-              <span style={{
-                width: '14px',
-                height: '14px',
-                borderRadius: '50%',
-                backgroundColor: productColor.hex,
-                border: '1px solid #ccc',
-                display: 'inline-block',
-              }} />
-              {productColor.name}
-            </span>
-          </h4>
-          <div className="cpd-sizes-list" style={{ marginTop: '8px' }}>
-            {SIZES.map((size) => (
-              <span key={size} className="cpd-size-badge">{size}</span>
-            ))}
-          </div>
+        <label>Select Sizes & Quantities</label>
+        <div className="cpd-sizes-matrix">
+          {SIZES.map((size) => {
+             const qty = sizesQuantities[size] || '';
+             return (
+               <div key={size} className="cpd-size-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '10px' }}>
+                 <span className="cpd-size-pill" style={{ width: '40px', textAlign: 'center' }}>{size}</span>
+                 <input 
+                   type="number" 
+                   min="0" 
+                   placeholder="Qty" 
+                   value={qty}
+                   onChange={(e) => {
+                     const val = parseInt(e.target.value) || 0;
+                     const newSizes = { ...sizesQuantities };
+                     if (val > 0) newSizes[size] = val;
+                     else delete newSizes[size];
+                     setSizesQuantities(newSizes);
+                   }}
+                   style={{ width: '60px', padding: '4px 8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                 />
+               </div>
+             );
+          })}
+        </div>
+      </div>
+
+      <div className="cpd-detail-section">
+        <label>Decoration Method</label>
+        <div className="cpd-decoration-method">
+           <span>🖨️</span>
+           <strong>Printed (DTG / Screen)</strong>
         </div>
       </div>
     </div>

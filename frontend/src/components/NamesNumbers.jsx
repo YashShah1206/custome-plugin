@@ -195,18 +195,7 @@ export default function NamesNumbers() {
         </button>
       )}
 
-      {/* Pricing info */}
-      {step === 1 && (
-        <div className="cpd-nn-info">
-          <p><strong>Full list required for accurate pricing</strong></p>
-          {namesConfig.addNames && <p>Names: $5.50 each</p>}
-          {namesConfig.addNumbers && <p>Numbers: $3.50 each</p>}
-          <ul>
-            <li>Our artists will place each name/number from your list</li>
-            <li>Names/numbers may be printed or vinyl</li>
-          </ul>
-        </div>
-      )}
+      {/* Pricing and Info removed as requested */}
 
       {/* Step 2: entry table */}
       {step === 2 && (

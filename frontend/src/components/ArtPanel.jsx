@@ -3,20 +3,30 @@ import { DesignContext, PRINT_AREAS } from '../App';
 import { fabric } from 'fabric';
 import { artCategories } from '../data/artworks';
 
+const CANVAS_WIDTH  = 500;
+const CANVAS_HEIGHT = 600;
+
 function ArtPanel() {
   const { canvasRef, activeView, saveToHistory, incrementCustomizationCount } = useContext(DesignContext);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const addArtToCanvas = (svgString, name) => {
+  const addArtToCanvas = (svgString, name, categoryName) => {
     if (!canvasRef.current) return;
     const area = PRINT_AREAS[activeView] || PRINT_AREAS.front;
-    const centerX = area.left + area.width / 2;
-    const centerY = area.top + area.height / 2;
+
+    // Convert ratio-based PRINT_AREAS to pixel coordinates
+    const areaLeftPx   = area.left   * CANVAS_WIDTH;
+    const areaTopPx    = area.top    * CANVAS_HEIGHT;
+    const areaWidthPx  = area.width  * CANVAS_WIDTH;
+    const areaHeightPx = area.height * CANVAS_HEIGHT;
+
+    const centerX = areaLeftPx + areaWidthPx  / 2;
+    const centerY = areaTopPx  + areaHeightPx / 2;
 
     fabric.loadSVGFromString(svgString, (objects, options) => {
       const svgObj = fabric.util.groupSVGElements(objects, options);
-      const maxSize = Math.min(area.width * 0.5, area.height * 0.4);
+      const maxSize = Math.min(areaWidthPx * 0.5, areaHeightPx * 0.4);
       const scale = Math.min(maxSize / svgObj.width, maxSize / svgObj.height, 1);
 
       svgObj.set({
@@ -28,14 +38,18 @@ function ArtPanel() {
         originY: 'center',
         cornerStyle: 'circle',
         cornerColor: '#4361ee',
-        cornerSize: 10,
+        cornerSize: 12,
         transparentCorners: false,
         borderColor: '#4361ee',
+        hasControls: true,
+        hasBorders: true,
+        data: { type: 'artwork', artName: name, artCategory: categoryName || '' },
       });
       canvasRef.current.add(svgObj);
       canvasRef.current.setActiveObject(svgObj);
       canvasRef.current.renderAll();
       incrementCustomizationCount?.();
+      saveToHistory();
     });
   };
 
@@ -51,7 +65,7 @@ function ArtPanel() {
         cat.items.filter(item =>
           item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           cat.name.toLowerCase().includes(searchQuery.toLowerCase())
-        )
+        ).map(item => ({ ...item, _categoryName: cat.name }))
       )
     : [];
 
@@ -89,7 +103,7 @@ function ArtPanel() {
             <div
               key={idx}
               className="cpd-art-item"
-              onClick={() => addArtToCanvas(item.svg, item.name)}
+              onClick={() => addArtToCanvas(item.svg, item.name, item._categoryName || '')}
               title={item.name}
             >
               <span dangerouslySetInnerHTML={{ __html: item.svg }} />
@@ -118,7 +132,7 @@ function ArtPanel() {
               <div
                 key={idx}
                 className="cpd-art-item"
-                onClick={() => addArtToCanvas(item.svg, item.name)}
+                onClick={() => addArtToCanvas(item.svg, item.name, selectedCategory.name)}
                 title={item.name}
               >
                 <span dangerouslySetInnerHTML={{ __html: item.svg }} />

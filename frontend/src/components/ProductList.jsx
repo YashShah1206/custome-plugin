@@ -110,13 +110,16 @@ function StarRating({ rating }) {
 }
 
 export default function ProductList({ category, onSelectProduct, onBack }) {
-  const [selectedColor, setSelectedColor] = useState(null);
   const [sortBy, setSortBy] = useState('recommended');
   const products = generateProducts(category);
 
-  const filtered = selectedColor
-    ? products.filter(p => p.colors.some(c => c.toLowerCase() === selectedColor.toLowerCase()))
-    : products;
+  // Implement Sorting Logic
+  const sortedProducts = [...products].sort((a, b) => {
+    if (sortBy === 'price-low') return a.price - b.price;
+    if (sortBy === 'price-high') return b.price - a.price;
+    if (sortBy === 'rating') return b.rating - a.rating;
+    return 0; // Default: Recommended (array order)
+  });
 
   return (
     <div className="cpd-product-list">
@@ -128,40 +131,11 @@ export default function ProductList({ category, onSelectProduct, onBack }) {
       </div>
 
       <div className="cpd-list-layout">
-        {/* Sidebar filters */}
-        <aside className="cpd-list-sidebar">
-          <h3>{category.name}</h3>
-
-          <div className="cpd-filter-group">
-            <h4>Color Family</h4>
-            <div className="cpd-filter-colors">
-              {FILTER_COLORS.map(fc => (
-                <button
-                  key={fc.hex}
-                  className={`cpd-filter-color-btn ${selectedColor === fc.hex ? 'active' : ''}`}
-                  style={{ background: fc.hex, border: fc.hex === '#ffffff' ? '1px solid #ddd' : 'none' }}
-                  title={fc.name}
-                  onClick={() => setSelectedColor(selectedColor === fc.hex ? null : fc.hex)}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="cpd-filter-group">
-            <h4>Rush Delivery</h4>
-            {['3 days – Super Rush', '1 week – Rush', '10 days', '12 days'].map(d => (
-              <label key={d} className="cpd-filter-check">
-                <input type="checkbox" /> {d}
-              </label>
-            ))}
-          </div>
-        </aside>
-
-        {/* Product grid */}
+        {/* Product grid — now taking full width */}
         <main className="cpd-list-main">
           <div className="cpd-list-header">
             <h1>Custom {category.name}</h1>
-            <p>{filtered.length} items</p>
+            <p>{sortedProducts.length} items</p>
             <div className="cpd-sort-row">
               <label>Sort By:</label>
               <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
@@ -174,7 +148,7 @@ export default function ProductList({ category, onSelectProduct, onBack }) {
           </div>
 
           <div className="cpd-product-grid">
-            {filtered.map(product => (
+            {sortedProducts.map(product => (
               <div
                 key={product.id}
                 className="cpd-product-card"
@@ -201,7 +175,7 @@ export default function ProductList({ category, onSelectProduct, onBack }) {
                   <StarRating rating={product.rating} />
                   <p className="cpd-product-card-reviews">({product.reviews.toLocaleString()}+ ratings)</p>
                   <p className="cpd-product-card-price">
-                    <strong>${product.price.toFixed(2)}/ea</strong>
+                    <strong>${Number(product.price).toFixed(2)}/ea</strong>
                     <span> for 500 items</span>
                   </p>
                   <p className="cpd-product-no-min">No Minimum</p>

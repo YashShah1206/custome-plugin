@@ -2,6 +2,9 @@ import React, { useContext, useRef, useState } from 'react';
 import { DesignContext, PRINT_AREAS } from '../App';
 import { fabric } from 'fabric';
 
+const CANVAS_WIDTH  = 500;
+const CANVAS_HEIGHT = 600;
+
 function UploadPanel() {
   const { canvasRef, activeView, saveToHistory, incrementCustomizationCount } = useContext(DesignContext);
   const fileInputRef = useRef(null);
@@ -19,27 +22,55 @@ function UploadPanel() {
     }
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const dataUrl = e.target.result;
       setRecentUploads(prev => [dataUrl, ...prev].slice(0, 6));
-      addImageToCanvas(dataUrl);
+
+      // Try to upload to WordPress for a persistent URL
+      let wpUrl = null;
+      const wpData = typeof window !== 'undefined' && window.cpdData;
+      if (wpData && wpData.restUrl) {
+        try {
+          const fd = new FormData();
+          fd.append('file', file);
+          const resp = await fetch(wpData.restUrl + 'upload', {
+            method: 'POST',
+            headers: { 'X-WP-Nonce': wpData.nonce },
+            body: fd,
+          });
+          const result = await resp.json();
+          if (result.success && result.url) {
+            wpUrl = result.url;
+          }
+        } catch (err) {
+          console.warn('WP upload failed, using data URL:', err);
+        }
+      }
+
+      addImageToCanvas(wpUrl || dataUrl, wpUrl);
     };
     reader.readAsDataURL(file);
   };
 
-  const addImageToCanvas = (dataUrl) => {
+  const addImageToCanvas = (imageUrl, wpUrl) => {
     if (!canvasRef.current) return;
     const area = PRINT_AREAS[activeView] || PRINT_AREAS.front;
 
-    fabric.Image.fromURL(dataUrl, (img) => {
+    // Convert ratio-based PRINT_AREAS to pixel coordinates
+    const areaLeftPx   = area.left   * CANVAS_WIDTH;
+    const areaTopPx    = area.top    * CANVAS_HEIGHT;
+    const areaWidthPx  = area.width  * CANVAS_WIDTH;
+    const areaHeightPx = area.height * CANVAS_HEIGHT;
+
+    fabric.Image.fromURL(imageUrl, (img) => {
       // Scale to fit within the print area
-      const maxW = area.width * 0.8;
-      const maxH = area.height * 0.6;
+      const maxW = areaWidthPx  * 0.8;
+      const maxH = areaHeightPx * 0.6;
       const scale = Math.min(maxW / img.width, maxH / img.height, 1);
 
-      // Center in the print area
-      const centerX = area.left + area.width / 2;
-      const centerY = area.top + area.height / 2;
+      // Center in the print area (pixel coords)
+      const centerX = areaLeftPx + areaWidthPx  / 2;
+      const centerY = areaTopPx  + areaHeightPx / 2;
 
       img.set({
         scaleX: scale,
@@ -50,16 +81,20 @@ function UploadPanel() {
         originY: 'center',
         cornerStyle: 'circle',
         cornerColor: '#4361ee',
-        cornerSize: 10,
+        cornerSize: 12,
         transparentCorners: false,
         borderColor: '#4361ee',
+        hasControls: true,
+        hasBorders: true,
+        data: { type: 'uploaded-image', wpUrl: wpUrl || null },
       });
 
       canvasRef.current.add(img);
       canvasRef.current.setActiveObject(img);
       canvasRef.current.renderAll();
       incrementCustomizationCount?.();
-    });
+      saveToHistory();
+    }, { crossOrigin: 'anonymous' });
   };
 
   const handleBrowse = () => {
@@ -139,7 +174,7 @@ function UploadPanel() {
                 key={i}
                 src={url}
                 alt={`Upload ${i + 1}`}
-                onClick={() => addImageToCanvas(url)}
+                onClick={() => addImageToCanvas(url, null)}
               />
             ))}
           </div>

@@ -2,7 +2,7 @@ import React, { useContext } from 'react';
 import { DesignContext } from '../App';
 
 function Toolbar() {
-  const { undo, redo, historyIndex, historyLength, canvasRef, clearAll, saveToHistory } = useContext(DesignContext);
+  const { canvasRef, clearAll, saveToHistory } = useContext(DesignContext);
 
   const deleteSelected = () => {
     if (!canvasRef.current) return;
@@ -21,30 +21,6 @@ function Toolbar() {
 
   return (
     <div className="cpd-toolbar">
-      <button
-        className="cpd-toolbar-btn"
-        onClick={undo}
-        disabled={historyIndex <= 0}
-        title="Undo"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="1 4 1 10 7 10" />
-          <path d="M3.51 15a9 9 0 101.92-5.44L1 10" />
-        </svg>
-        Undo
-      </button>
-      <button
-        className="cpd-toolbar-btn"
-        onClick={redo}
-        disabled={historyIndex >= historyLength - 1}
-        title="Redo"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="23 4 23 10 17 10" />
-          <path d="M20.49 15a9 9 0 11-1.92-5.44L23 10" />
-        </svg>
-        Redo
-      </button>
       <button
         className="cpd-toolbar-btn"
         onClick={deleteSelected}

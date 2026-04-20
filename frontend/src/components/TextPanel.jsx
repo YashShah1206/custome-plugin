@@ -2,6 +2,9 @@ import React, { useContext, useState, useEffect, useRef } from 'react';
 import { DesignContext, PRINT_AREAS } from '../App';
 import { fabric } from 'fabric';
 
+const CANVAS_WIDTH  = 500;
+const CANVAS_HEIGHT = 600;
+
 const FONTS = [
   'Inter', 'Roboto', 'Open Sans', 'Montserrat', 'Poppins', 'Oswald',
   'Raleway', 'Playfair Display', 'Lora', 'Merriweather',
@@ -24,21 +27,21 @@ function addCurvedTextToCanvas(canvas, text, options) {
     charSpacing, curveAmount, left, top,
   } = options;
 
-  const r = Math.abs(curveAmount) * 1.5 + 80;
+  const r = Math.abs(20000 / (curveAmount || 1)); // Larger radius for smaller curve
   const dir = curveAmount >= 0 ? 1 : -1;
   const chars = text.split('');
   const totalChars = chars.length;
   if (totalChars === 0) return;
 
-  const charWidth = (fontSize * 0.6) + (charSpacing / 10);
+  const charWidth = (fontSize * 0.5) + (charSpacing / 10);
   const totalArc = (totalChars * charWidth) / r;
   const startAngle = -Math.PI / 2 - (totalArc / 2);
 
-  const group = [];
+  const groupItems = [];
   chars.forEach((char, i) => {
     const angle = startAngle + (i + 0.5) * (totalArc / totalChars);
-    const cx = left + r * Math.cos(angle);
-    const cy = top + dir * r * Math.sin(angle);
+    const cx = r * Math.cos(angle);
+    const cy = dir * r * Math.sin(angle);
     const rotation = (angle + Math.PI / 2) * (180 / Math.PI) * dir;
 
     const charText = new fabric.Text(char, {
@@ -51,27 +54,50 @@ function addCurvedTextToCanvas(canvas, text, options) {
       fontWeight: fontWeight || 'normal',
       fontStyle: fontStyle || 'normal',
       underline: !!underline,
-      charSpacing: 0,
       selectable: false,
       evented: false,
     });
-    group.push(charText);
+    groupItems.push(charText);
   });
 
-  const fabricGroup = new fabric.Group(group, {
-    left: left - r,
-    top: top - (dir > 0 ? r : r * 0.5),
+  const fabricGroup = new fabric.Group(groupItems, {
+    left: left,
+    top: top,
+    originX: 'center',
+    originY: 'center',
     cornerStyle: 'circle',
     cornerColor: '#4361ee',
     cornerSize: 10,
     transparentCorners: false,
     borderColor: '#4361ee',
-    data: { type: 'curved-text', originalText: text },
+    data: { 
+      type: 'curved-text', 
+      originalText: text,
+      curveAmount: curveAmount
+    },
   });
+  
   canvas.add(fabricGroup);
   canvas.setActiveObject(fabricGroup);
   canvas.renderAll();
 }
+
+// Alignment Icons
+const AlignLeft = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="17" y1="10" x2="3" y2="10" /><line x1="21" y1="6" x2="3" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="17" y1="18" x2="3" y2="18" />
+  </svg>
+);
+const AlignCenter = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="10" x2="6" y2="10" /><line x1="21" y1="6" x2="3" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="18" y1="18" x2="6" y2="18" />
+  </svg>
+);
+const AlignRight = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="21" y1="10" x2="7" y2="10" /><line x1="21" y1="6" x2="3" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="21" y1="18" x2="7" y2="18" />
+  </svg>
+);
 
 export default function TextPanel() {
   const { canvasRef, activeView, saveToHistory, incrementCustomizationCount } = useContext(DesignContext);
@@ -115,7 +141,6 @@ export default function TextPanel() {
       } else if (obj.type === 'group' && obj.data?.type === 'curved-text') {
         setSelectedText(obj);
         setText(obj.data.originalText || '');
-        // Read options from the first character
         const firstChar = obj._objects[0];
         if (firstChar) {
           setFont(firstChar.fontFamily || 'Inter');
@@ -134,7 +159,10 @@ export default function TextPanel() {
 
     canvas.on('selection:created', onSelect);
     canvas.on('selection:updated', onSelect);
-    canvas.on('selection:cleared', () => setSelectedText(null));
+    canvas.on('selection:cleared', () => {
+      setSelectedText(null);
+      // setText(''); // don't clear text input on deselect so user can edit last text
+    });
 
     return () => {
       canvas.off('selection:created', onSelect);
@@ -143,18 +171,37 @@ export default function TextPanel() {
     };
   }, [canvasRef]);
 
-  // 2. Apply live changes to selected text (Debounced History)
+  // Handle alignment with positioning logic
+  const handleAlignmentChange = (newAlign) => {
+    setTextAlign(newAlign);
+    if (!selectedText || !canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const area = PRINT_AREAS[activeView] || PRINT_AREAS.front;
+    const areaLeftPx = area.left * CANVAS_WIDTH;
+    const areaWidthPx = area.width * CANVAS_WIDTH;
+
+    let newLeft = areaLeftPx + areaWidthPx / 2;
+    if (newAlign === 'left') {
+      newLeft = areaLeftPx + (selectedText.width * selectedText.scaleX) / 2;
+    } else if (newAlign === 'right') {
+      newLeft = (areaLeftPx + areaWidthPx) - (selectedText.width * selectedText.scaleX) / 2;
+    }
+
+    selectedText.set({ textAlign: newAlign, left: newLeft });
+    selectedText.setCoords();
+    canvas.renderAll();
+    saveToHistory();
+  };
+
+  // 2. Apply live changes to selected text
   useEffect(() => {
     if (!selectedText || !canvasRef.current || !text) return;
     const canvas = canvasRef.current;
-
-    // Prevent recursive updates if standard selection
     let madeChanges = false;
 
     if (curved) {
-      // Recreate curved text live
       if (selectedText.data?.type === 'curved-text') {
-        // Only recreate if properties actually differ to avoid flickering
         if (
           selectedText.data.originalText !== text ||
           selectedText.data.curveAmount !== curveAmount ||
@@ -165,8 +212,8 @@ export default function TextPanel() {
           (selectedText._objects[0]?.fontStyle === 'italic') !== italic ||
           !!selectedText._objects[0]?.underline !== underline
         ) {
-          const top = selectedText.top + (curveAmount > 0 ? 50 : 0);
-          const left = selectedText.left + selectedText.width / 2;
+          const top = selectedText.top;
+          const left = selectedText.left;
           canvas.remove(selectedText);
           addCurvedTextToCanvas(canvas, text, {
             fontFamily: font, fontSize, fill: textColor,
@@ -178,7 +225,6 @@ export default function TextPanel() {
           madeChanges = true;
         }
       } else if (selectedText.type === 'i-text') {
-        // Converting normal text to curved text
         const top = selectedText.top;
         const left = selectedText.left;
         canvas.remove(selectedText);
@@ -192,9 +238,7 @@ export default function TextPanel() {
         madeChanges = true;
       }
     } else {
-      // Normal Text Edit
       if (selectedText.type === 'group' && selectedText.data?.type === 'curved-text') {
-        // Converting curved text back to normal text
         const top = selectedText.top;
         const left = selectedText.left + selectedText.width / 2;
         canvas.remove(selectedText);
@@ -228,7 +272,6 @@ export default function TextPanel() {
 
     if (madeChanges) {
       canvas.renderAll();
-      // Debounce history save
       const timer = setTimeout(() => saveToHistory(), 500);
       return () => clearTimeout(timer);
     }
@@ -239,48 +282,41 @@ export default function TextPanel() {
     const canvas = canvasRef.current;
     const area = PRINT_AREAS[activeView] || PRINT_AREAS.front;
 
-    // Center text in the print area
-    const centerX = area.left + area.width / 2;
-    const centerY = area.top + area.height / 2;
+    const areaLeftPx   = area.left   * CANVAS_WIDTH;
+    const areaTopPx    = area.top    * CANVAS_HEIGHT;
+    const areaWidthPx  = area.width  * CANVAS_WIDTH;
+    const areaHeightPx = area.height * CANVAS_HEIGHT;
+
+    let posX = areaLeftPx + areaWidthPx / 2;
+    if (textAlign === 'left') posX = areaLeftPx + 40;
+    if (textAlign === 'right') posX = areaLeftPx + areaWidthPx - 40;
+    
+    const centerY = areaTopPx  + areaHeightPx / 2;
 
     if (curved) {
       addCurvedTextToCanvas(canvas, text, {
-        fontFamily: font,
-        fontSize,
-        fill: textColor,
+        fontFamily: font, fontSize, fill: textColor,
         fontWeight: bold ? 'bold' : 'normal',
         fontStyle: italic ? 'italic' : 'normal',
-        underline,
-        charSpacing: letterSpacing,
-        curveAmount,
-        left: centerX,
-        top: centerY,
+        underline, charSpacing: letterSpacing, curveAmount,
+        left: posX, top: centerY,
       });
     } else {
       const textObj = new fabric.IText(text, {
-        left: centerX,
-        top: centerY,
-        originX: 'center',
-        originY: 'center',
-        fontFamily: font,
-        fontSize: fontSize,
-        fill: textColor,
+        left: posX, top: centerY,
+        originX: 'center', originY: 'center',
+        fontFamily: font, fontSize: fontSize, fill: textColor,
         fontWeight: bold ? 'bold' : 'normal',
         fontStyle: italic ? 'italic' : 'normal',
-        underline: underline,
-        textAlign: textAlign,
+        underline: underline, textAlign: textAlign,
         charSpacing: letterSpacing,
-        cornerStyle: 'circle',
-        cornerColor: '#4361ee',
-        cornerSize: 10,
-        transparentCorners: false,
-        borderColor: '#4361ee',
+        cornerStyle: 'circle', cornerColor: '#4361ee', cornerSize: 10,
+        transparentCorners: false, borderColor: '#4361ee',
       });
       canvas.add(textObj);
       canvas.setActiveObject(textObj);
       canvas.renderAll();
     }
-
     incrementCustomizationCount?.();
     saveToHistory();
   };
@@ -298,7 +334,7 @@ export default function TextPanel() {
   };
 
   return (
-    <div>
+    <div className="cpd-panel-inner">
       <div className="cpd-text-input-wrap">
         <input
           type="text"
@@ -315,7 +351,7 @@ export default function TextPanel() {
       </button>
 
       {selectedText && (
-        <button className="cpd-delete-btn" onClick={deleteSelected} style={{ marginBottom: '8px' }}>
+        <button className="cpd-delete-btn" onClick={deleteSelected}>
           🗑 Delete Selected
         </button>
       )}
@@ -346,32 +382,24 @@ export default function TextPanel() {
           />
         </div>
 
-        {/* Format */}
-        <div className="cpd-text-tool-group">
-          <label>Format</label>
-          <div className="cpd-text-format-row">
-            <button className={`cpd-format-btn ${bold ? 'active' : ''}`} onClick={() => setBold(!bold)} title="Bold" style={{ fontWeight: 'bold' }}>B</button>
-            <button className={`cpd-format-btn ${italic ? 'active' : ''}`} onClick={() => setItalic(!italic)} title="Italic" style={{ fontStyle: 'italic' }}>I</button>
-            <button className={`cpd-format-btn ${underline ? 'active' : ''}`} onClick={() => setUnderline(!underline)} title="Underline" style={{ textDecoration: 'underline' }}>U</button>
+        {/* Format & Alignment */}
+        <div className="cpd-text-row-group">
+          <div className="cpd-text-tool-group" style={{ flex: 1 }}>
+            <label>Format</label>
+            <div className="cpd-text-format-row">
+              <button className={`cpd-format-btn ${bold ? 'active' : ''}`} onClick={() => setBold(!bold)} title="Bold" style={{ fontWeight: 'bold' }}>B</button>
+              <button className={`cpd-format-btn ${italic ? 'active' : ''}`} onClick={() => setItalic(!italic)} title="Italic" style={{ fontStyle: 'italic' }}>I</button>
+              <button className={`cpd-format-btn ${underline ? 'active' : ''}`} onClick={() => setUnderline(!underline)} title="Underline" style={{ textDecoration: 'underline' }}>U</button>
+            </div>
           </div>
-        </div>
 
-        {/* Alignment */}
-        <div className="cpd-text-tool-group">
-          <label>Alignment</label>
-          <div className="cpd-text-align-row">
-            {['left', 'center', 'right'].map((align) => (
-              <button
-                key={align}
-                className={`cpd-format-btn ${textAlign === align ? 'active' : ''}`}
-                onClick={() => setTextAlign(align)}
-                title={align}
-              >
-                {align === 'left' && '⫷'}
-                {align === 'center' && '⫿'}
-                {align === 'right' && '⫸'}
-              </button>
-            ))}
+          <div className="cpd-text-tool-group" style={{ flex: 1 }}>
+            <label>Alignment</label>
+            <div className="cpd-text-align-row">
+              <button className={`cpd-format-btn ${textAlign === 'left' ? 'active' : ''}`} onClick={() => handleAlignmentChange('left')} title="Align Left"><AlignLeft /></button>
+              <button className={`cpd-format-btn ${textAlign === 'center' ? 'active' : ''}`} onClick={() => handleAlignmentChange('center')} title="Align Center"><AlignCenter /></button>
+              <button className={`cpd-format-btn ${textAlign === 'right' ? 'active' : ''}`} onClick={() => handleAlignmentChange('right')} title="Align Right"><AlignRight /></button>
+            </div>
           </div>
         </div>
 
@@ -379,21 +407,26 @@ export default function TextPanel() {
         <div className="cpd-text-tool-group">
           <label>Text Color</label>
           <div className="cpd-color-picker-row">
-            {TEXT_COLORS.map((color) => (
-              <div
-                key={color}
-                className={`cpd-color-swatch ${textColor === color ? 'active' : ''}`}
-                style={{ backgroundColor: color, border: color === '#ffffff' ? '1px solid #ddd' : 'none' }}
-                onClick={() => setTextColor(color)}
+            <div className="cpd-swatch-grid">
+              {TEXT_COLORS.map((color) => (
+                <div
+                  key={color}
+                  className={`cpd-color-swatch ${textColor === color ? 'active' : ''}`}
+                  style={{ backgroundColor: color, border: color === '#ffffff' ? '1px solid #ddd' : 'none' }}
+                  onClick={() => setTextColor(color)}
+                />
+              ))}
+            </div>
+            <div className="cpd-custom-color-wrap">
+              <input
+                type="color"
+                value={textColor}
+                onChange={e => setTextColor(e.target.value)}
+                title="Custom color"
+                className="cpd-color-custom-input"
               />
-            ))}
-            <input
-              type="color"
-              value={textColor}
-              onChange={e => setTextColor(e.target.value)}
-              title="Custom color"
-              className="cpd-color-custom-input"
-            />
+              <span>Custom</span>
+            </div>
           </div>
         </div>
 
@@ -402,36 +435,29 @@ export default function TextPanel() {
           <label>Letter Spacing: {letterSpacing}</label>
           <input
             type="range" className="cpd-size-slider"
-            min="-100" max="800" value={letterSpacing}
+            min="-100" max="500" value={letterSpacing}
             onChange={(e) => setLetterSpacing(Number(e.target.value))}
           />
         </div>
 
         {/* Curved Text */}
-        <div className="cpd-text-tool-group">
+        <div className="cpd-curved-section">
           <div className="cpd-curved-toggle">
+            <span>Curved Text</span>
             <label className="cpd-toggle-switch">
-              <input
-                type="checkbox"
-                checked={curved}
-                onChange={(e) => setCurved(e.target.checked)}
-              />
+              <input type="checkbox" checked={curved} onChange={(e) => setCurved(e.target.checked)} />
               <span className="cpd-toggle-slider"></span>
             </label>
-            <span>Curved Text</span>
           </div>
           {curved && (
-            <>
-              <label style={{ fontSize: '12px', color: '#888', marginTop: '6px', display: 'block' }}>
-                Curve Amount: {curveAmount > 0 ? `↑ ${curveAmount}` : `↓ ${Math.abs(curveAmount)}`}
-              </label>
+            <div className="cpd-curved-controls">
+              <label>Amount: {curveAmount > 0 ? `↑ ${curveAmount}` : `↓ ${Math.abs(curveAmount)}`}</label>
               <input
                 type="range" className="cpd-curved-slider"
                 min="-200" max="200" value={curveAmount}
                 onChange={(e) => setCurveAmount(Number(e.target.value))}
               />
-              <p className="cpd-curved-hint">💡 Add text with curved enabled to see the arc effect</p>
-            </>
+            </div>
           )}
         </div>
       </div>

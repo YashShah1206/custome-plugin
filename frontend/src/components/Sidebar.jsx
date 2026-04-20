@@ -5,6 +5,7 @@ import TextPanel from './TextPanel';
 import ArtPanel from './ArtPanel';
 import ProductDetails from './ProductDetails';
 import NamesNumbers from './NamesNumbers';
+import NotesPanel from './NotesPanel';
 
 const navItems = [
   {
@@ -62,6 +63,15 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    id: 'notes',
+    label: 'Notes',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+      </svg>
+    ),
+  },
 ];
 
 const panelTitles = {
@@ -70,6 +80,7 @@ const panelTitles = {
   art: 'Artwork Categories',
   details: 'Product and Decoration Details',
   names: 'Names and Numbers Tools',
+  notes: 'Design Instructions',
 };
 
 const panelComponents = {
@@ -78,10 +89,11 @@ const panelComponents = {
   art: ArtPanel,
   details: ProductDetails,
   names: NamesNumbers,
+  notes: NotesPanel,
 };
 
 function Sidebar() {
-  const { activePanel, setActivePanel } = useContext(DesignContext);
+  const { activePanel, setActivePanel, setScreen } = useContext(DesignContext);
   const PanelComponent = panelComponents[activePanel];
 
   return (
@@ -101,11 +113,11 @@ function Sidebar() {
       </nav>
       <div className="cpd-sidebar-panel">
         <div className="cpd-panel-header">
-          <h3>
-            <button className="cpd-back-btn" title="Back">‹</button>
-            {panelTitles[activePanel]}
-          </h3>
-          <button className="cpd-close-btn" title="Close">✕</button>
+          <div className="cpd-panel-header-left">
+            <button className="cpd-back-btn" onClick={() => setActivePanel(null)} title="Back">‹</button>
+            <h3>{panelTitles[activePanel]}</h3>
+          </div>
+          <button className="cpd-close-btn" onClick={() => setScreen('detail')} title="Return to Product Detail">✕</button>
         </div>
         <div className="cpd-panel-body">
           {PanelComponent && <PanelComponent />}

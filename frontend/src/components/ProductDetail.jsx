@@ -164,11 +164,7 @@ export default function ProductDetail({ product, category, onStartDesigning, onB
             </div>
           </div>
 
-          <div className="cpd-detail-delivery-badges">
-            <span>🚚 FREE Delivery Est. 10–12 days</span>
-            <span>⚡ Rush Delivery Available</span>
-            <span>🔥 Super Rush Available</span>
-          </div>
+          {/* Removed delivery badges as per request */}
 
           <div className="cpd-detail-section">
             <h3>Decoration:</h3>
@@ -205,7 +201,7 @@ export default function ProductDetail({ product, category, onStartDesigning, onB
           </div>
 
           <div className="cpd-detail-price-row">
-            <span className="cpd-detail-price">${product.price.toFixed(2)}</span>
+            <span className="cpd-detail-price">${Number(product.price).toFixed(2)}</span>
             <span className="cpd-detail-price-label">/ea for {qty} item{qty>1?'s':''}</span>
           </div>
 
