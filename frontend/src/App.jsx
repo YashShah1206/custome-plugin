@@ -76,6 +76,8 @@ export const PRINT_AREAS = {
 
 
 
+
+
 export function calcPrice(itemCount, basePrice = 25) {
   // Return basePrice without any increments for artwork/images
   return basePrice;

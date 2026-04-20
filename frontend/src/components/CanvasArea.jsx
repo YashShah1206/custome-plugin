@@ -21,21 +21,21 @@ const pluginUrl = window.cpdData?.pluginUrl || '';
 
 const mockupImages = isWordPress
   ? {
-      front: `${pluginUrl}build/mockups/front tshirt.png`,
-      back: `${pluginUrl}build/mockups/back tshirt.png`,
-      leftSleeve: `${pluginUrl}build/mockups/left sliv.png`,
-      rightSleeve: `${pluginUrl}build/mockups/right sliv.png`,
-    }
+    front: `${pluginUrl}build/mockups/front tshirt.png`,
+    back: `${pluginUrl}build/mockups/back tshirt.png`,
+    leftSleeve: `${pluginUrl}build/mockups/left sliv.png`,
+    rightSleeve: `${pluginUrl}build/mockups/right sliv.png`,
+  }
   : {
-      front: '/mockups/front tshirt.png',
-      back: '/mockups/back tshirt.png',
-      leftSleeve: '/mockups/left sliv.png',
-      rightSleeve: '/mockups/right sliv.png',
-    };
+    front: '/mockups/front tshirt.png',
+    back: '/mockups/back tshirt.png',
+    leftSleeve: '/mockups/left sliv.png',
+    rightSleeve: '/mockups/right sliv.png',
+  };
 
 // Canvas matches the t-shirt container (500×600) so the user
 // can always drag objects without the mouse leaving the canvas.
-export const CANVAS_WIDTH  = 500;
+export const CANVAS_WIDTH = 500;
 export const CANVAS_HEIGHT = 600;
 
 export default function CanvasArea() {
@@ -48,7 +48,7 @@ export default function CanvasArea() {
   } = useContext(DesignContext);
 
   const [selectionInfo, setSelectionInfo] = React.useState(null);
-  const canvasElRef  = useRef(null);
+  const canvasElRef = useRef(null);
   // useRef-based flag survives React Strict Mode's double-invoke
   const fabricInited = useRef(false);
 
@@ -77,10 +77,10 @@ export default function CanvasArea() {
       const pa = canvas._printArea;
       if (!pa) return;
 
-      const boxLeft   = pa.left   * CANVAS_WIDTH;
-      const boxTop    = pa.top    * CANVAS_HEIGHT;
-      const boxRight  = boxLeft + pa.width  * CANVAS_WIDTH;
-      const boxBottom = boxTop  + pa.height * CANVAS_HEIGHT;
+      const boxLeft = pa.left * CANVAS_WIDTH;
+      const boxTop = pa.top * CANVAS_HEIGHT;
+      const boxRight = boxLeft + pa.width * CANVAS_WIDTH;
+      const boxBottom = boxTop + pa.height * CANVAS_HEIGHT;
 
       // Get the object's axis-aligned bounding rect (accounts for rotation/scale)
       const br = obj.getBoundingRect(true, true);
@@ -88,14 +88,14 @@ export default function CanvasArea() {
       let dx = 0, dy = 0;
 
       // Prevent going left / top
-      if (br.left < boxLeft)   dx = boxLeft  - br.left;
-      if (br.top  < boxTop)    dy = boxTop   - br.top;
+      if (br.left < boxLeft) dx = boxLeft - br.left;
+      if (br.top < boxTop) dy = boxTop - br.top;
       // Prevent going right / bottom
-      if (br.left + br.width  > boxRight)  dx = boxRight  - (br.left + br.width);
-      if (br.top  + br.height > boxBottom) dy = boxBottom - (br.top  + br.height);
+      if (br.left + br.width > boxRight) dx = boxRight - (br.left + br.width);
+      if (br.top + br.height > boxBottom) dy = boxBottom - (br.top + br.height);
 
       if (dx !== 0) obj.set('left', obj.left + dx);
-      if (dy !== 0) obj.set('top',  obj.top  + dy);
+      if (dy !== 0) obj.set('top', obj.top + dy);
       obj.setCoords();
     };
 
@@ -117,7 +117,7 @@ export default function CanvasArea() {
       });
     };
 
-    canvas.on('object:moving',  (e) => {
+    canvas.on('object:moving', (e) => {
       clampObject(e.target);
       updateSelectionInfo();
     });
@@ -125,7 +125,7 @@ export default function CanvasArea() {
       clampObject(e.target);
       updateSelectionInfo();
     });
-    canvas.on('object:rotating',(e) => {
+    canvas.on('object:rotating', (e) => {
       clampObject(e.target);
       updateSelectionInfo();
     });
@@ -144,7 +144,7 @@ export default function CanvasArea() {
       canvas.dispose();
       canvasRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ── Update the print-area bounds when the view changes ── */
@@ -155,9 +155,9 @@ export default function CanvasArea() {
   }, [activeView, canvasRef]);
 
   /* ── Print-area pixel helpers ── */
-  const pxLeft   = activeBox.left   * CANVAS_WIDTH;
-  const pxTop    = activeBox.top    * CANVAS_HEIGHT;
-  const pxWidth  = activeBox.width  * CANVAS_WIDTH;
+  const pxLeft = activeBox.left * CANVAS_WIDTH;
+  const pxTop = activeBox.top * CANVAS_HEIGHT;
+  const pxWidth = activeBox.width * CANVAS_WIDTH;
   const pxHeight = activeBox.height * CANVAS_HEIGHT;
 
   return (
@@ -236,7 +236,7 @@ export default function CanvasArea() {
 
         {/* Floating Dimension Label */}
         {selectionInfo && (
-          <div 
+          <div
             className="cpd-dimension-label"
             style={{
               position: 'absolute',
