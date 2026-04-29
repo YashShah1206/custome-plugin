@@ -6,8 +6,21 @@ import ArtPanel from './ArtPanel';
 import ProductDetails from './ProductDetails';
 import NamesNumbers from './NamesNumbers';
 import NotesPanel from './NotesPanel';
+import TemplatePanel from './TemplatePanel';
 
 const navItems = [
+  {
+    id: 'templates',
+    label: 'Templates',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" />
+        <rect x="14" y="3" width="7" height="7" />
+        <rect x="14" y="14" width="7" height="7" />
+        <rect x="3" y="14" width="7" height="7" />
+      </svg>
+    ),
+  },
   {
     id: 'upload',
     label: 'Upload',
@@ -75,8 +88,9 @@ const navItems = [
 ];
 
 const panelTitles = {
+  templates: 'Design Templates',
   upload: 'Choose File To Upload',
-  text: 'Add Text',
+  text: 'Add Text (V2)',
   art: 'Artwork Categories',
   details: 'Product and Decoration Details',
   names: 'Names and Numbers Tools',
@@ -84,6 +98,7 @@ const panelTitles = {
 };
 
 const panelComponents = {
+  templates: TemplatePanel,
   upload: UploadPanel,
   text: TextPanel,
   art: ArtPanel,
@@ -111,18 +126,19 @@ function Sidebar() {
           </button>
         ))}
       </nav>
-      <div className="cpd-sidebar-panel">
-        <div className="cpd-panel-header">
-          <div className="cpd-panel-header-left">
-            <button className="cpd-back-btn" onClick={() => setActivePanel(null)} title="Back">‹</button>
-            <h3>{panelTitles[activePanel]}</h3>
+      {activePanel && (
+        <div className="cpd-sidebar-panel">
+          <div className="cpd-panel-header">
+            <div className="cpd-panel-header-left">
+              <button className="cpd-back-btn" onClick={() => setActivePanel(null)} title="Close Panel">‹</button>
+              <h3>{panelTitles[activePanel]}</h3>
+            </div>
           </div>
-          <button className="cpd-close-btn" onClick={() => setScreen('detail')} title="Return to Product Detail">✕</button>
+          <div className="cpd-panel-body">
+            {PanelComponent && <PanelComponent />}
+          </div>
         </div>
-        <div className="cpd-panel-body">
-          {PanelComponent && <PanelComponent />}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -15,9 +15,42 @@ class CPD_Woo_Hooks {
         
         $product_id = $product->get_id();
         
-        // Find if there's a page with [product_designer] shortcode
-        // Hardcoding /design-studio/ for now. User needs to create a WP Page with this slug.
-        $designer_page_url = site_url('/design-studio/') . '?product_id=' . $product_id . '&start_customizing=1';
+        // M8: Dynamically find the page with [product_designer] shortcode
+        $designer_page_url = '';
+        $cached_page_id = get_option('cpd_designer_page_id', 0);
+        
+        if ($cached_page_id > 0) {
+            $page = get_post($cached_page_id);
+            if ($page && $page->post_status === 'publish' && has_shortcode($page->post_content, 'product_designer')) {
+                $designer_page_url = get_permalink($cached_page_id);
+            } else {
+                // Cached page no longer valid, clear cache
+                delete_option('cpd_designer_page_id');
+                $cached_page_id = 0;
+            }
+        }
+        
+        if (empty($designer_page_url)) {
+            // Search for a page with the shortcode
+            $pages = get_posts(array(
+                'post_type' => 'page',
+                'post_status' => 'publish',
+                's' => '[product_designer',
+                'posts_per_page' => 1,
+            ));
+            if (!empty($pages)) {
+                $designer_page_url = get_permalink($pages[0]->ID);
+                update_option('cpd_designer_page_id', $pages[0]->ID, false);
+            } else {
+                // Fallback to default slug
+                $designer_page_url = site_url('/design-studio/');
+            }
+        }
+        
+        $designer_page_url = add_query_arg(array(
+            'product_id' => $product_id,
+            'start_customizing' => '1',
+        ), $designer_page_url);
         
         echo '<div class="cpd-button-container" style="margin-top: 20px; margin-bottom: 25px;">';
         echo '<style>

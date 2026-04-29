@@ -1,19 +1,22 @@
 import React, { useContext, useState } from 'react';
-import { DesignContext, PRINT_AREAS } from '../App';
+import { DesignContext } from '../App';
 import { fabric } from 'fabric';
 import { artCategories } from '../data/artworks';
 
-const CANVAS_WIDTH  = 500;
-const CANVAS_HEIGHT = 600;
+const CANVAS_WIDTH  = 1200;
+const CANVAS_HEIGHT = 1440;
 
 function ArtPanel() {
-  const { canvasRef, activeView, saveToHistory, incrementCustomizationCount } = useContext(DesignContext);
+  const { canvasRef, activeView, saveToHistory, incrementCustomizationCount, artLibrary, showDefaultArt, PRINT_AREAS } = useContext(DesignContext);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [hoveredArt, setHoveredArt] = useState(null);
 
-  const addArtToCanvas = (svgString, name, categoryName) => {
+  const addArtToCanvas = (artItem, categoryName) => {
     if (!canvasRef.current) return;
-    const area = PRINT_AREAS[activeView] || PRINT_AREAS.front;
+    const areaRaw = PRINT_AREAS[activeView] || PRINT_AREAS.front;
+    const area = Array.isArray(areaRaw) ? areaRaw[0] : areaRaw;
+    if (!area) return;
 
     // Convert ratio-based PRINT_AREAS to pixel coordinates
     const areaLeftPx   = area.left   * CANVAS_WIDTH;
@@ -24,12 +27,11 @@ function ArtPanel() {
     const centerX = areaLeftPx + areaWidthPx  / 2;
     const centerY = areaTopPx  + areaHeightPx / 2;
 
-    fabric.loadSVGFromString(svgString, (objects, options) => {
-      const svgObj = fabric.util.groupSVGElements(objects, options);
+    const onComplete = (obj) => {
       const maxSize = Math.min(areaWidthPx * 0.5, areaHeightPx * 0.4);
-      const scale = Math.min(maxSize / svgObj.width, maxSize / svgObj.height, 1);
+      const scale = Math.min(maxSize / obj.width, maxSize / obj.height, 1);
 
-      svgObj.set({
+      obj.set({
         scaleX: scale,
         scaleY: scale,
         left: centerX,
@@ -43,25 +45,41 @@ function ArtPanel() {
         borderColor: '#4361ee',
         hasControls: true,
         hasBorders: true,
-        data: { type: 'artwork', artName: name, artCategory: categoryName || '' },
+        data: { type: 'artwork', artName: artItem.name, artCategory: categoryName || '' },
       });
-      canvasRef.current.add(svgObj);
-      canvasRef.current.setActiveObject(svgObj);
+      canvasRef.current.add(obj);
+      canvasRef.current.setActiveObject(obj);
       canvasRef.current.renderAll();
       incrementCustomizationCount?.();
       saveToHistory();
-    });
+    };
+
+    if (artItem.svg) {
+      fabric.loadSVGFromString(artItem.svg, (objects, options) => {
+        const svgObj = fabric.util.groupSVGElements(objects, options);
+        onComplete(svgObj);
+      });
+    } else if (artItem.url) {
+      fabric.Image.fromURL(artItem.url, (img) => {
+        onComplete(img);
+      }, { crossOrigin: 'anonymous' });
+    }
   };
 
+  const combinedCategories = [
+    ...(showDefaultArt ? artCategories : []),
+    ...artLibrary
+  ];
+
   const filteredCategories = searchQuery
-    ? artCategories.filter(cat =>
+    ? combinedCategories.filter(cat =>
         cat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         cat.items.some(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
       )
-    : artCategories;
+    : combinedCategories;
 
   const allFilteredItems = searchQuery
-    ? artCategories.flatMap(cat =>
+    ? combinedCategories.flatMap(cat =>
         cat.items.filter(item =>
           item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           cat.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -70,7 +88,7 @@ function ArtPanel() {
     : [];
 
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
       <input
         type="text"
         className="cpd-art-search"
@@ -84,7 +102,7 @@ function ArtPanel() {
 
       {!selectedCategory && !searchQuery && (
         <div className="cpd-art-categories">
-          {artCategories.map((cat) => (
+          {filteredCategories.map((cat) => (
             <div
               key={cat.id}
               className="cpd-art-category"
@@ -103,10 +121,16 @@ function ArtPanel() {
             <div
               key={idx}
               className="cpd-art-item"
-              onClick={() => addArtToCanvas(item.svg, item.name, item._categoryName || '')}
+              onMouseEnter={() => setHoveredArt(item.name)}
+              onMouseLeave={() => setHoveredArt(null)}
+              onClick={() => addArtToCanvas(item, item._categoryName || '')}
               title={item.name}
             >
-              <span dangerouslySetInnerHTML={{ __html: item.svg }} />
+              {item.svg ? (
+                <span dangerouslySetInnerHTML={{ __html: item.svg }} />
+              ) : (
+                <img src={item.url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              )}
             </div>
           ))}
         </div>
@@ -132,13 +156,25 @@ function ArtPanel() {
               <div
                 key={idx}
                 className="cpd-art-item"
-                onClick={() => addArtToCanvas(item.svg, item.name, selectedCategory.name)}
+                onMouseEnter={() => setHoveredArt(item.name)}
+                onMouseLeave={() => setHoveredArt(null)}
+                onClick={() => addArtToCanvas(item, selectedCategory.name)}
                 title={item.name}
               >
-                <span dangerouslySetInnerHTML={{ __html: item.svg }} />
+                {item.svg ? (
+                  <span dangerouslySetInnerHTML={{ __html: item.svg }} />
+                ) : (
+                  <img src={item.url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                )}
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {hoveredArt && (
+        <div className="cpd-art-hover-label">
+          {hoveredArt}
         </div>
       )}
     </div>

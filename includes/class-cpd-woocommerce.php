@@ -39,8 +39,7 @@ class CPD_WooCommerce {
         // 10. Server-side trampoline: intercept cpd_add_to_cart and add item directly
         add_action('template_redirect', array($this, 'handle_cpd_add_to_cart'));
 
-        // 11. Debug endpoint: visit ?cpd_debug_cart=1 to see cart contents
-        add_action('template_redirect', array($this, 'debug_cart_contents'));
+        // 11. (Debug endpoint removed for production security)
 
         // 12. Force classic cart & checkout instead of Block Cart (Astra/Block compatibility fix)
         add_filter('the_content', array($this, 'force_classic_cart_checkout'), 1);
@@ -54,6 +53,46 @@ class CPD_WooCommerce {
 
         // 15. Rename Cart Headers for Unified Table
         add_filter('gettext', array($this, 'rename_cart_headers'), 20, 3);
+
+        // 16. Data Loss Prevention Alerts for Cart and Checkout
+        add_action('wp_footer', array($this, 'add_global_safety_alerts'));
+
+        // 17. Hide internal meta keys from Order Item display
+        add_filter('woocommerce_hidden_order_itemmeta', array($this, 'hide_cpd_item_meta'));
+    }
+
+    /**
+     * Add "Are you sure you want to leave?" alert to Cart and Checkout pages
+     */
+    public function add_global_safety_alerts() {
+        if (is_cart() || is_checkout()) {
+            ?>
+            <script type="text/javascript">
+                (function() {
+                    window.addEventListener('beforeunload', function (e) {
+                        // Bypass if we are proceeding to checkout or placing order
+                        if (window.cpd_is_checkout_proceed) return;
+
+                        // Show browser confirmation dialog
+                        e.preventDefault();
+                        e.returnValue = ''; 
+                    });
+
+                    // Listen for "Proceed to Checkout" or "Place Order" button clicks
+                    document.addEventListener('click', function(e) {
+                        // Check for standard WooCommerce buttons and payment gateway buttons
+                        const checkoutBtn = e.target.closest('.checkout-button');
+                        const placeOrderBtn = e.target.closest('#place_order');
+                        const anyPlaceOrder = e.target.closest('[name="woocommerce_checkout_place_order"]');
+                        
+                        if (checkoutBtn || placeOrderBtn || anyPlaceOrder) {
+                            window.cpd_is_checkout_proceed = true;
+                        }
+                    }, true);
+                })();
+            </script>
+            <?php
+        }
     }
 
     /**
@@ -69,81 +108,12 @@ class CPD_WooCommerce {
         }
         return $content;
     }
-
-
     /**
-     * Debug endpoint: visit t-design.local/?cpd_debug_cart=1 to see current cart state
-     * REMOVE THIS IN PRODUCTION
+     * Debug endpoint removed for production.
+     * Hook was removed in constructor. Method stub kept for safety.
      */
     public function debug_cart_contents() {
-        if (!isset($_GET['cpd_debug_cart'])) {
-            return;
-        }
-
-        header('Content-Type: text/html; charset=utf-8');
-
-        echo '<h1>CPD Cart Debug</h1>';
-        echo '<h2>WooCommerce Status</h2>';
-        echo '<p>WC loaded: ' . (function_exists('WC') ? 'YES' : 'NO') . '</p>';
-        echo '<p>Cart object: ' . (WC()->cart ? 'YES' : 'NO') . '</p>';
-        echo '<p>Session object: ' . (WC()->session ? 'YES' : 'NO') . '</p>';
-        echo '<p>Cart URL: ' . wc_get_cart_url() . '</p>';
-        echo '<p>Session ID: ' . (WC()->session ? WC()->session->get_customer_id() : 'N/A') . '</p>';
-
-        echo '<h2>Cart Contents (' . WC()->cart->get_cart_contents_count() . ' items)</h2>';
-        $cart = WC()->cart->get_cart();
-        if (empty($cart)) {
-            echo '<p style="color:red;font-weight:bold;">CART IS EMPTY</p>';
-        } else {
-            echo '<pre>';
-            foreach ($cart as $key => $item) {
-                echo "Item Key: $key\n";
-                echo "  Product ID: " . $item['product_id'] . "\n";
-                echo "  Quantity: " . $item['quantity'] . "\n";
-                echo "  CPD Design ID: " . ($item['cpd_design_id'] ?? 'NOT SET') . "\n";
-                echo "  CPD Design URLs: " . ($item['cpd_design_urls'] ?? 'NOT SET') . "\n";
-                echo "---\n";
-            }
-            echo '</pre>';
-        }
-
-        // Test add if requested
-        if (isset($_GET['test_product_id'])) {
-            $test_pid = absint($_GET['test_product_id']);
-            $product = wc_get_product($test_pid);
-            echo '<h2>Test Add Product #' . $test_pid . '</h2>';
-            if ($product) {
-                echo '<p>Product found: ' . $product->get_name() . ' (Type: ' . $product->get_type() . ')</p>';
-                echo '<p>Is purchasable: ' . ($product->is_purchasable() ? 'YES' : 'NO') . '</p>';
-                echo '<p>Is in stock: ' . ($product->is_in_stock() ? 'YES' : 'NO') . '</p>';
-                
-                $result = WC()->cart->add_to_cart($test_pid, 1);
-                echo '<p>add_to_cart result: ' . ($result ? "SUCCESS (key: $result)" : '<span style="color:red">FAILED</span>') . '</p>';
-                
-                if ($result) {
-                    WC()->cart->maybe_set_cart_cookies();
-                    if (WC()->session) {
-                        WC()->session->save_data();
-                    }
-                    echo '<p style="color:green">Session saved. <a href="' . wc_get_cart_url() . '">Go to Cart now</a></p>';
-                }
-
-                // Show WC notices/errors
-                $notices = wc_get_notices();
-                if (!empty($notices)) {
-                    echo '<h3>WC Notices:</h3><pre>' . print_r($notices, true) . '</pre>';
-                }
-            } else {
-                echo '<p style="color:red">Product NOT FOUND!</p>';
-            }
-        }
-
-        echo '<h2>Quick Test Links</h2>';
-        echo '<p><a href="?cpd_debug_cart=1&test_product_id=24">Test add product #24</a></p>';
-        echo '<p><a href="?cpd_debug_cart=1&test_product_id=90">Test add product #90</a></p>';
-        echo '<p><a href="' . wc_get_cart_url() . '">Go to Cart Page</a></p>';
-
-        exit;
+        return;
     }
 
 
@@ -152,16 +122,22 @@ class CPD_WooCommerce {
      * This bypasses ALL theme/block incompatibilities because the addition happens before any rendering.
      */
     public function handle_cpd_add_to_cart() {
-        if (!isset($_GET['cpd_add_to_cart']) || !isset($_GET['cpd_design_id'])) {
+        // 1. Check for legacy GET format
+        $is_legacy = isset($_GET['cpd_add_to_cart']) && isset($_GET['cpd_design_id']);
+        // 2. Check for new POST format
+        $is_direct = isset($_POST['cpd_add_to_cart_direct']) && isset($_POST['cpd_design_data']);
+
+        if (!$is_legacy && !$is_direct) {
             return;
         }
 
-        $product_id = absint($_GET['cpd_add_to_cart']);
-        $design_id  = absint($_GET['cpd_design_id']);
-        $quantity   = isset($_GET['quantity']) ? max(1, absint($_GET['quantity'])) : 1;
-
-        if ($product_id <= 0 || $design_id <= 0) {
-            return;
+        // M4: Verify nonce for CSRF protection on direct POST
+        if ($is_direct) {
+            $nonce = isset($_POST['cpd_nonce']) ? sanitize_text_field($_POST['cpd_nonce']) : '';
+            // Frontend sends wp_rest nonce via cpdData.nonce
+            if (!wp_verify_nonce($nonce, 'wp_rest')) {
+                return; // Silent fail — don't process without valid nonce
+            }
         }
 
         // Ensure WooCommerce is fully loaded
@@ -169,37 +145,57 @@ class CPD_WooCommerce {
             return;
         }
 
-        // For variable products, we need to handle them as simple products
-        // by using variation_id = 0 (parent product)
-        $product = wc_get_product($product_id);
-        if (!$product) {
+        $product_id = 0;
+        $cart_item_data = array();
+        $quantity = 1;
+
+        if ($is_legacy) {
+            $product_id = absint($_GET['cpd_add_to_cart']);
+            $design_id = absint($_GET['cpd_design_id']);
+            $cart_item_data['cpd_design_id'] = $design_id;
+            $quantity = isset($_GET['quantity']) ? max(1, absint($_GET['quantity'])) : 1;
+        } else {
+            $product_id = absint($_POST['cpd_add_to_cart_direct']);
+            $raw_data = json_decode(stripslashes($_POST['cpd_design_data']), true);
+            if (is_array($raw_data)) {
+                $cart_item_data = $raw_data;
+                // Ensure URLs are encoded as JSON string for consistency in cart display logic
+                if (isset($cart_item_data['cpd_design_urls']) && is_array($cart_item_data['cpd_design_urls'])) {
+                    $cart_item_data['cpd_design_urls'] = json_encode($cart_item_data['cpd_design_urls'], JSON_UNESCAPED_SLASHES);
+                }
+
+                // IMPORTANT: Calculate the total quantity from sizes metadata
+                if (isset($cart_item_data['cpd_sizes_quantities'])) {
+                    $sizes = is_string($cart_item_data['cpd_sizes_quantities']) ? json_decode($cart_item_data['cpd_sizes_quantities'], true) : $cart_item_data['cpd_sizes_quantities'];
+                    if (is_array($sizes)) {
+                        $total_qty = 0;
+                        foreach ($sizes as $qty) {
+                            $total_qty += intval($qty);
+                        }
+                        if ($total_qty > 0) {
+                            $_POST['quantity'] = $total_qty; // Force WooCommerce to use our total
+                        }
+                    }
+                }
+            }
+            $quantity = isset($_POST['quantity']) ? max(1, absint($_POST['quantity'])) : 1;
+        }
+
+        if ($product_id <= 0) {
             return;
         }
 
         // Add product to cart using the official WooCommerce API
-        $cart_item_key = WC()->cart->add_to_cart(
-            $product_id,
-            $quantity,
-            0,       // variation_id
-            array(), // variation attributes
-            array('cpd_design_id' => $design_id)
-        );
+        $cart_item_key = WC()->cart->add_to_cart($product_id, $quantity, 0, array(), $cart_item_data);
 
-        // Force WooCommerce to persist the session and set cookies immediately
         if ($cart_item_key) {
-            // Set cart cookies so the session persists across the redirect
             WC()->cart->maybe_set_cart_cookies();
-            
-            // Force save session data before redirect
             if (WC()->session) {
                 WC()->session->save_data();
             }
+            wp_safe_redirect(wc_get_cart_url());
+            exit;
         }
-
-        // Redirect to the cart page (use wp_redirect, not wp_safe_redirect, to avoid host mismatch issues)
-        $cart_url = wc_get_cart_url();
-        wp_redirect($cart_url);
-        exit;
     }
 
 
@@ -272,21 +268,16 @@ class CPD_WooCommerce {
             }
         }
 
+        // Data already present from direct POST?
+        if (isset($cart_item_data['cpd_design_urls'])) {
+            return $cart_item_data;
+        }
+
         if ($design_id) {
             $cart_item_data['cpd_design_id'] = $design_id;
-            $design = CPD_Database::get_design($design_id);
-            if ($design) {
-                $cart_item_data['cpd_design_urls'] = $design->file_url;
-                $cart_item_data['cpd_product_color'] = $design->product_color;
-                $cart_item_data['cpd_sizes_quantities'] = $design->sizes_quantities ?? '';
-                $cart_item_data['cpd_fonts_used'] = $design->fonts_used ?? '';
-                $cart_item_data['cpd_images_used'] = $design->images_used ?? '';
-                $cart_item_data['cpd_text_content'] = $design->text_content ?? '';
-                $cart_item_data['cpd_artworks_used'] = $design->artworks_used ?? '';
-                $cart_item_data['cpd_names_numbers'] = $design->names_numbers ?? '';
-                $cart_item_data['cpd_total_price'] = $design->total_price ?? 25.00;
-                $cart_item_data['cpd_customer_notes'] = $design->customer_notes ?? '';
-            }
+            // C4: Legacy CPD_Database class no longer exists.
+            // All modern designs are added via direct POST with full data.
+            // This path is kept for backward compatibility but returns empty.
         }
 
         return $cart_item_data;
@@ -300,7 +291,7 @@ class CPD_WooCommerce {
             'cpd_design_id', 'cpd_design_urls', 'cpd_product_color',
             'cpd_sizes_quantities', 'cpd_fonts_used', 'cpd_images_used',
             'cpd_text_content', 'cpd_artworks_used',
-            'cpd_names_numbers', 'cpd_total_price',
+            'cpd_names_numbers', 'cpd_total_price', 'cpd_template_id',
         );
         foreach ($keys as $key) {
             if (isset($values[$key])) {
@@ -314,11 +305,11 @@ class CPD_WooCommerce {
      * Display custom data in Cart/Checkout pages — premium clean layout with modal
      */
     public function get_item_data($data, $cart_item) {
-        if (!isset($cart_item['cpd_design_id'])) {
+        if (!isset($cart_item['cpd_design_urls'])) {
             return $data;
         }
 
-        $design_id = $cart_item['cpd_design_id'];
+        $design_id = $cart_item['cpd_design_id'] ?? 0;
         $currency  = function_exists('get_woocommerce_currency_symbol') ? get_woocommerce_currency_symbol() : '$';
 
         // --- 1. Design View Thumbnails (4 views) ---
@@ -358,7 +349,9 @@ class CPD_WooCommerce {
         // --- 3. "View Details" Button + Hidden Modal Content ---
         $modal_content = $this->build_detail_modal_content($cart_item);
         if (!empty($modal_content)) {
-            $modal_id = 'cpd-modal-' . $design_id;
+            // Generate a unique ID for the modal (important when design_id is 0)
+            $unique_id = $design_id > 0 ? $design_id : substr(md5($cart_item['cpd_design_urls']), 0, 8);
+            $modal_id = 'cpd-modal-' . $unique_id;
             
             $html  = '<div class="cpd-cart-actions">';
             $html .= '<button type="button" class="cpd-view-details-btn" data-modal-id="' . $modal_id . '">';
@@ -370,7 +363,8 @@ class CPD_WooCommerce {
             $html .= '<div id="' . $modal_id . '" class="cpd-modal-overlay">';
             $html .= '<div class="cpd-modal-box">';
             $html .= '<div class="cpd-modal-header">';
-            $html .= '<h3>Design Details — #' . intval($design_id) . '</h3>';
+            $title = $design_id > 0 ? 'Design Details — #' . intval($design_id) : 'Design Details';
+            $html .= '<h3>' . $title . '</h3>';
             $html .= '<button type="button" class="cpd-modal-close" data-modal-id="' . $modal_id . '">&times;</button>';
             $html .= '</div>';
             $html .= '<div class="cpd-modal-body">' . $modal_content . '</div>';
@@ -392,11 +386,56 @@ class CPD_WooCommerce {
         if (did_action('woocommerce_before_calculate_totals') >= 2) return;
 
         foreach ($cart->get_cart() as $cart_item_key => $cart_item) {
-            if (!isset($cart_item['cpd_design_id'])) continue;
+            // Priority: Allow calculations even without DB record (direct cart addition)
+            if (!isset($cart_item['cpd_design_id']) && !isset($cart_item['cpd_design_urls'])) continue;
 
             $product = $cart_item['data'];
             $base_price = floatval($product->get_regular_price());
-            $size_prices = $this->get_size_prices($cart_item, $base_price);
+            
+            // Extract individual breakdown components manually here
+            $product_id = isset($cart_item['product_id']) ? $cart_item['product_id'] : 0;
+
+            // Cache post meta lookups to avoid repeated DB calls per cart item
+            static $meta_cache = array();
+            if (!isset($meta_cache[$product_id])) {
+                $meta_cache[$product_id] = array(
+                    'views' => get_post_meta($product_id, '_cpd_pricing_views', true),
+                    'sizes' => get_post_meta($product_id, '_cpd_pricing_sizes', true),
+                    'template' => get_post_meta($product_id, '_cpd_pricing_template', true),
+                );
+            }
+            $view_rules = is_array($meta_cache[$product_id]['views']) ? $meta_cache[$product_id]['views'] : array();
+            $size_rules = is_array($meta_cache[$product_id]['sizes']) ? $meta_cache[$product_id]['sizes'] : array();
+            $template_rule_val = $meta_cache[$product_id]['template'];
+            
+            $views_breakdown = array();
+            $total_view_upcharge = 0;
+            if (!empty($cart_item['cpd_text_content'])) {
+                $views_data = json_decode($cart_item['cpd_text_content'], true);
+                if (is_array($views_data)) {
+                    foreach ($views_data as $vk => $details) {
+                        if (is_array($details) && (!empty($details['text']) || !empty($details['art']))) {
+                            $upcharge = floatval($view_rules[$vk] ?? 0);
+                            if ($upcharge > 0) {
+                                $total_view_upcharge += $upcharge;
+                                $views_breakdown[$vk] = $upcharge;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $template_upcharge = 0;
+            if (!empty($cart_item['cpd_template_id'])) {
+                if (!empty($template_rule_val)) {
+                    $template_upcharge = floatval($template_rule_val);
+                }
+            }
+
+            $base_item_price = $base_price + $total_view_upcharge + $template_upcharge;
+
+            // $size_rules already set from cache above
+
             $sizes = json_decode($cart_item['cpd_sizes_quantities'] ?? '{}', true);
             
             $size_total = 0;
@@ -406,11 +445,20 @@ class CPD_WooCommerce {
             foreach ($sizes as $size => $qty) {
                 $qty = intval($qty);
                 if ($qty <= 0) continue;
-                $unit = $size_prices[$size] ?? $base_price;
+                
+                $size_upcharge = 0;
+                foreach ($size_rules as $rule) {
+                    if (strcasecmp(trim($rule['size']), trim($size)) === 0) {
+                        $size_upcharge = floatval($rule['price']);
+                        break;
+                    }
+                }
+                
+                $unit = $base_item_price + $size_upcharge;
                 $sub = $unit * $qty;
                 $size_total += $sub;
                 $total_qty += $qty;
-                $breakdown[] = array('size' => $size, 'unit' => $unit, 'qty' => $qty, 'sub' => $sub);
+                $breakdown[] = array('size' => $size, 'unit' => $unit, 'qty' => $qty, 'sub' => $sub, 'upcharge' => $size_upcharge);
             }
 
             $extras = $this->calculate_extra_charges($cart_item);
@@ -425,7 +473,12 @@ class CPD_WooCommerce {
             WC()->cart->cart_contents[$cart_item_key]['cpd_price_breakdown'] = array(
                 'items'  => $breakdown,
                 'extras' => $extras,
-                'total'  => $design_total
+                'total'  => $design_total,
+                'base_price' => $base_price,
+                'views' => $views_breakdown,
+                'template' => $template_upcharge,
+                'item_base' => $base_item_price,
+                'total_qty' => $total_qty
             );
 
             if ($total_qty > 0) {
@@ -446,7 +499,7 @@ class CPD_WooCommerce {
     }
 
     public function cart_item_price_display($price_html, $cart_item, $cart_item_key) {
-        if (!isset($cart_item['cpd_design_id'])) return $price_html;
+        if (!isset($cart_item['cpd_design_urls'])) return $price_html;
         
         $breakdown = $cart_item['cpd_price_breakdown'] ?? null;
         if (!$breakdown) return $price_html;
@@ -475,7 +528,7 @@ class CPD_WooCommerce {
     public function cart_item_quantity_display($product_quantity, $cart_item_key, $cart_item = null) {
         // Handle cases where $cart_item is not passed (depends on WC version/context)
         if (!$cart_item) $cart_item = WC()->cart->get_cart_item($cart_item_key);
-        if (!$cart_item || !isset($cart_item['cpd_design_id'])) return $product_quantity;
+        if (!$cart_item || !isset($cart_item['cpd_design_urls'])) return $product_quantity;
 
         $breakdown = $cart_item['cpd_price_breakdown'] ?? null;
         if (!$breakdown) return $product_quantity;
@@ -503,7 +556,7 @@ class CPD_WooCommerce {
      * Override standard Cart "Subtotal" column
      */
     public function cart_item_subtotal_display($subtotal_html, $cart_item, $cart_item_key) {
-        if (!isset($cart_item['cpd_design_id'])) return $subtotal_html;
+        if (!isset($cart_item['cpd_design_urls'])) return $subtotal_html;
 
         $currency = get_woocommerce_currency_symbol();
         $breakdown = $cart_item['cpd_price_breakdown'] ?? null;
@@ -529,22 +582,51 @@ class CPD_WooCommerce {
         return $html;
     }
 
-    /**
-     * Get per-size prices. Currently returns the same base price for all sizes.
-     * FUTURE: Override this to return different prices per size from product meta.
-     *
-     * @param array $cart_item  Cart item data
-     * @param float $base_price Default product price
-     * @return array  [ 'S' => 500, 'M' => 500, 'L' => 1000, ... ]
-     */
     private function get_size_prices($cart_item, $base_price) {
         $sizes = json_decode($cart_item['cpd_sizes_quantities'] ?? '{}', true);
         $prices = array();
         
+        $product_id = isset($cart_item['product_id']) ? $cart_item['product_id'] : 0;
+        $size_rules = get_post_meta($product_id, '_cpd_pricing_sizes', true);
+        if (!is_array($size_rules)) $size_rules = array();
+
+        // Calculate base with view upcharges
+        $view_rules = get_post_meta($product_id, '_cpd_pricing_views', true);
+        $total_view_upcharge = 0;
+        if (is_array($view_rules) && !empty($cart_item['cpd_text_content'])) {
+            $views_data = json_decode($cart_item['cpd_text_content'], true);
+            if (is_array($views_data)) {
+                foreach ($views_data as $vk => $details) {
+                    if (is_array($details) && (!empty($details['text']) || !empty($details['art']))) {
+                        $upcharge = floatval($view_rules[$vk] ?? 0);
+                        if ($upcharge > 0) {
+                            $total_view_upcharge += $upcharge;
+                        }
+                    }
+                }
+            }
+        }
+
+        $template_upcharge = 0;
+        if (!empty($cart_item['cpd_template_id'])) {
+            $template_rule = get_post_meta($product_id, '_cpd_pricing_template', true);
+            if (!empty($template_rule)) {
+                $template_upcharge = floatval($template_rule);
+            }
+        }
+
+        $base_item_price = $base_price + $total_view_upcharge + $template_upcharge;
+
         if (is_array($sizes)) {
             foreach ($sizes as $size => $qty) {
-                // Simplified: All sizes use the same base product price
-                $prices[$size] = $base_price > 0 ? $base_price : 0;
+                $upcharge = 0;
+                foreach ($size_rules as $rule) {
+                    if (strcasecmp(trim($rule['size']), trim($size)) === 0) {
+                        $upcharge = floatval($rule['price']);
+                        break;
+                    }
+                }
+                $prices[$size] = $base_item_price + $upcharge;
             }
         }
         return $prices;
@@ -552,17 +634,11 @@ class CPD_WooCommerce {
 
     /**
      * Calculate extra charges based on design complexity.
-     * Currently returns empty array (no extras).
-     * FUTURE: Add rules like:
-     *   - Images > 2 = +$5 per extra image
-     *   - Art icons > 3 = +$3 per extra icon
-     *   - Names/numbers = +$2 per entry
-     *
-     * @param array $cart_item  Cart item data
-     * @return array [ ['label' => 'Extra images (3)', 'amount' => 5.00], ... ]
      */
     private function calculate_extra_charges($cart_item) {
-        // Simplified: Returning empty array (no extra charges)
+        // Since we rolled view upcharges directly into the base unit price per size 
+        // in get_size_prices, we don't need to return separate view upcharges here.
+        // This ensures the size breakdown table multiplies the (Base + View) price * qty correctly.
         return array();
     }
 
@@ -576,7 +652,66 @@ class CPD_WooCommerce {
 
         $html = '<div class="cpd-modal-wrapper">';
 
-        // Removed Pricing Summary section from modal as requested (already visible in main row)
+        // Price Breakdown
+        if (!empty($breakdown) && isset($breakdown['base_price'])) {
+            $html .= '<div class="cpd-modal-section"><h4>Price Breakdown</h4>';
+            
+            $html .= '<div class="cpd-detail-row" style="justify-content: space-between;">';
+            $html .= '<span style="color:#aaa;">Base Price</span>';
+            $html .= '<strong>' . $currency . number_format($breakdown['base_price'], 2) . '</strong>';
+            $html .= '</div>';
+
+            if (!empty($breakdown['views'])) {
+                foreach ($breakdown['views'] as $v => $upcharge) {
+                    $html .= '<div class="cpd-detail-row" style="justify-content: space-between;">';
+                    $html .= '<span style="color:#aaa;">' . ucfirst($v) . ' Design</span>';
+                    $html .= '<strong>+' . $currency . number_format($upcharge, 2) . '</strong>';
+                    $html .= '</div>';
+                }
+            }
+
+            if (!empty($breakdown['template']) && $breakdown['template'] > 0) {
+                $html .= '<div class="cpd-detail-row" style="justify-content: space-between;">';
+                $html .= '<span style="color:#aaa;">Template Upcharge</span>';
+                $html .= '<strong>+' . $currency . number_format($breakdown['template'], 2) . '</strong>';
+                $html .= '</div>';
+            }
+
+            $html .= '<div style="border-top: 1px solid #eee; margin: 8px 0;"></div>';
+
+            $html .= '<div class="cpd-detail-row" style="justify-content: space-between;">';
+            $html .= '<span style="color:#aaa;">Price Per Item</span>';
+            $html .= '<strong>' . $currency . number_format($breakdown['item_base'], 2) . '</strong>';
+            $html .= '</div>';
+
+            $html .= '<div class="cpd-detail-row" style="justify-content: space-between;">';
+            $html .= '<span style="color:#aaa;">Total Quantity</span>';
+            $html .= '<strong>x ' . intval($breakdown['total_qty']) . '</strong>';
+            $html .= '</div>';
+
+            if (!empty($breakdown['items'])) {
+                $html .= '<div style="background: #f9f9f9; padding: 10px; border-radius: 4px; margin-top: 10px;">';
+                $html .= '<strong style="font-size: 11px; text-transform: uppercase; color: #888; display: block; margin-bottom: 6px;">Size Breakdown</strong>';
+                foreach ($breakdown['items'] as $item) {
+                    $html .= '<div class="cpd-detail-row" style="justify-content: space-between; font-size: 13px; padding: 2px 0;">';
+                    $html .= '<span>' . esc_html($item['size']) . ' (x' . $item['qty'] . ')';
+                    if (!empty($item['upcharge']) && $item['upcharge'] > 0) {
+                        $html .= ' <span style="color: #ef4444;">(+' . $currency . number_format($item['upcharge'], 2) . ')</span>';
+                    }
+                    $html .= '</span>';
+                    $html .= '<span>' . $currency . number_format($item['sub'], 2) . '</span>';
+                    $html .= '</div>';
+                }
+                $html .= '</div>';
+            }
+
+            $html .= '<div style="border-top: 1px solid #ddd; margin-top: 12px; padding-top: 12px; display: flex; justify-content: space-between; font-size: 16px;">';
+            $html .= '<strong>Total</strong>';
+            $html .= '<strong>' . $currency . number_format($breakdown['total'], 2) . '</strong>';
+            $html .= '</div>';
+
+            $html .= '</div>';
+        }
 
         // Text & Art per view
         if (!empty($cart_item['cpd_text_content'])) {
@@ -641,6 +776,28 @@ class CPD_WooCommerce {
             }
         }
 
+        // Uploaded Images
+        if (!empty($cart_item['cpd_images_used'])) {
+            $images = json_decode($cart_item['cpd_images_used'], true);
+            if (is_array($images) && !empty($images)) {
+                $html .= '<div class="cpd-modal-section">';
+                $html .= '<h4>🖼️ Uploaded Images</h4>';
+                $html .= '<div class="cpd-modal-images-grid">';
+                foreach ($images as $img) {
+                    $url = is_array($img) ? ($img['url'] ?? '') : $img;
+                    $dims = is_array($img) ? ($img['dimensions'] ?? '') : '';
+                    if (empty($url)) continue;
+                    $html .= '<div class="cpd-modal-image-item">';
+                    $html .= sprintf('<a href="%s" target="_blank"><img src="%s" /></a>', esc_url($url), esc_url($url));
+                    if (!empty($dims)) {
+                        $html .= '<span class="cpd-modal-image-dims">' . esc_html($dims) . '</span>';
+                    }
+                    $html .= '</div>';
+                }
+                $html .= '</div></div>';
+            }
+        }
+
         // Customer Notes
         if (!empty($cart_item['cpd_customer_notes'])) {
             $html .= '<div class="cpd-modal-section cpd-notes-section">';
@@ -669,12 +826,18 @@ class CPD_WooCommerce {
             'cpd_artworks_used'    => '_cpd_artworks_used',
             'cpd_names_numbers'    => '_cpd_names_numbers',
             'cpd_customer_notes'   => '_cpd_customer_notes',
+            'cpd_template_id'      => '_cpd_template_id',
         );
 
         foreach ($meta_keys as $cart_key => $meta_key) {
             if (isset($values[$cart_key])) {
                 $item->add_meta_data($meta_key, $values[$cart_key]);
             }
+        }
+
+        // Save Price Breakdown JSON to order
+        if (isset($values['cpd_price_breakdown'])) {
+            $item->add_meta_data('_cpd_price_breakdown', wp_json_encode($values['cpd_price_breakdown']));
         }
     }
 
@@ -759,6 +922,76 @@ class CPD_WooCommerce {
             echo '<em>' . nl2br(esc_html($notes)) . '</em>';
             echo '</p>';
         }
+
+        // Uploaded Images
+        $images_json = $item->get_meta('_cpd_images_used');
+        if ($images_json) {
+            $images = json_decode($images_json, true);
+            if (is_array($images) && !empty($images)) {
+                echo '<p style="margin-top:15px; border-top:1px solid #eee; padding-top:15px;">';
+                echo '<strong>🖼️ Uploaded Images:</strong><br>';
+                echo '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">';
+                foreach ($images as $img) {
+                    $url = is_array($img) ? ($img['url'] ?? '') : $img;
+                    $dims = is_array($img) ? ($img['dimensions'] ?? '') : '';
+                    if (empty($url)) continue;
+                    echo '<div style="text-align:center;">';
+                    echo sprintf(
+                        '<a href="%1$s" target="_blank"><img src="%1$s" style="width:100px; height:100px; object-fit:cover; border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-radius:4px; cursor:zoom-in;" /></a>',
+                        esc_url($url)
+                    );
+                    if (!empty($dims)) {
+                        echo '<div style="font-size:10px; color:#666; margin-top:4px; background:#f0f0f0; border-radius:3px; padding:2px 4px;">' . esc_html($dims) . '</div>';
+                    }
+                    echo '</div>';
+                }
+                echo '</div></p>';
+            }
+        }
+
+        // Price Breakdown Summary
+        $price_breakdown_json = $item->get_meta('_cpd_price_breakdown');
+        if ($price_breakdown_json) {
+            $breakdown = json_decode($price_breakdown_json, true);
+            if (is_array($breakdown) && isset($breakdown['base_price'])) {
+                $currency = get_woocommerce_currency_symbol();
+                echo '<div style="margin-top:15px; border:1px solid #cce5ff; background:#e6f2ff; padding:12px; border-radius:5px;">';
+                echo '<strong style="color:#004085; display:block; margin-bottom:8px; font-size:14px;">💰 Price Breakdown</strong>';
+                
+                echo '<table style="width:100%; font-size:13px; color:#004085;">';
+                echo '<tr><td>Base Price:</td><td style="text-align:right;"><strong>' . $currency . number_format($breakdown['base_price'], 2) . '</strong></td></tr>';
+                
+                if (!empty($breakdown['views'])) {
+                    foreach ($breakdown['views'] as $v => $charge) {
+                        echo '<tr><td>' . ucfirst($v) . ' Design:</td><td style="text-align:right;">+' . $currency . number_format($charge, 2) . '</td></tr>';
+                    }
+                }
+                
+                if (!empty($breakdown['template']) && $breakdown['template'] > 0) {
+                    echo '<tr><td>Template Upcharge:</td><td style="text-align:right;">+' . $currency . number_format($breakdown['template'], 2) . '</td></tr>';
+                }
+                
+                echo '<tr><td colspan="2"><hr style="margin:6px 0; border-top:1px solid #b8daff;" /></td></tr>';
+                echo '<tr><td><strong>Unit Price:</strong></td><td style="text-align:right;"><strong>' . $currency . number_format($breakdown['item_base'], 2) . '</strong></td></tr>';
+                echo '<tr><td>Total Quantity:</td><td style="text-align:right;">x ' . intval($breakdown['total_qty']) . '</td></tr>';
+                
+                if (!empty($breakdown['items'])) {
+                    echo '<tr><td colspan="2"><strong style="font-size: 11px; text-transform: uppercase; color: #888; display: block; margin-top: 6px;">Size Breakdown</strong></td></tr>';
+                    foreach ($breakdown['items'] as $item) {
+                        echo '<tr><td style="padding-left:10px;">↳ ' . esc_html($item['size']) . ' (x' . $item['qty'] . ')';
+                        if (!empty($item['upcharge']) && $item['upcharge'] > 0) {
+                            echo ' <span style="color: #ef4444;">(+' . $currency . number_format($item['upcharge'], 2) . ')</span>';
+                        }
+                        echo '</td><td style="text-align:right;">' . $currency . number_format($item['sub'], 2) . '</td></tr>';
+                    }
+                }
+
+                echo '<tr><td colspan="2"><hr style="margin:6px 0; border-top:1px solid #b8daff;" /></td></tr>';
+                echo '<tr><td><strong style="font-size:15px;">Total Design Cost:</strong></td><td style="text-align:right;"><strong style="font-size:15px;">' . $currency . number_format($breakdown['total'], 2) . '</strong></td></tr>';
+                echo '</table>';
+                echo '</div>';
+            }
+        }
     }
 
     /**
@@ -798,7 +1031,43 @@ class CPD_WooCommerce {
             object-fit: contain;
             border-radius: 6px;
             display: block;
-            margin: 0 auto;
+        }
+
+        /* Modal Images Grid */
+        .cpd-modal-images-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 12px;
+            margin-top: 10px;
+        }
+        .cpd-modal-image-item {
+            aspect-ratio: 1;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #f9f9f9;
+        }
+        .cpd-modal-image-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transition: transform 0.2s;
+        }
+        .cpd-modal-image-item img:hover {
+            transform: scale(1.05);
+        }
+        .cpd-modal-image-dims {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 9px;
+            padding: 2px 4px;
+            text-align: center;
+            pointer-events: none;
         }
         .cpd-cart-view-label {
             display: block;
@@ -1352,7 +1621,7 @@ class CPD_WooCommerce {
         foreach ($_POST['cpd_qty'] as $cart_item_key => $sizes) {
             // Get the item from the cart
             $cart_item = WC()->cart->get_cart_item($cart_item_key);
-            if (!$cart_item || !isset($cart_item['cpd_design_id'])) {
+            if (!$cart_item || !isset($cart_item['cpd_design_urls'])) {
                 continue;
             }
 
@@ -1369,7 +1638,7 @@ class CPD_WooCommerce {
             
             // Sync the main WooCommerce item quantity
             if ($new_total_qty > 0) {
-                WC()->cart->set_quantity($cart_item_key, $new_total_qty, false);
+                WC()->cart->set_quantity($cart_item_key, $new_total_qty, true); // Force totals refresh
             } else {
                 // If total is 0, we could remove the item, but usually user should click "Remove"
                 // For now, let's keep it at 1 or whatever standard behavior
@@ -1464,5 +1733,26 @@ class CPD_WooCommerce {
         });
         </script>
         <?php
+    }
+
+    /**
+     * Hide internal design meta keys from the WooCommerce order item display (admin and customer).
+     */
+    public function hide_cpd_item_meta($hidden_meta) {
+        $cpd_keys = array(
+            '_cpd_design_id',
+            '_cpd_design_urls',
+            '_cpd_product_color',
+            '_cpd_sizes_quantities',
+            '_cpd_fonts_used',
+            '_cpd_images_used',
+            '_cpd_text_content',
+            '_cpd_artworks_used',
+            '_cpd_names_numbers',
+            '_cpd_customer_notes',
+            '_cpd_template_id',
+            '_cpd_price_breakdown',
+        );
+        return array_merge($hidden_meta, $cpd_keys);
     }
 }

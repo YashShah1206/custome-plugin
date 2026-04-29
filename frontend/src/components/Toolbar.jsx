@@ -8,8 +8,17 @@ function Toolbar() {
     if (!canvasRef.current) return;
     const active = canvasRef.current.getActiveObject();
     if (active) {
+      // Don't delete locked template objects
+      if (active.data?.editable === false || (active.lockMovementX && active.lockMovementY && active.data?.editable === true)) {
+        // If it's a locked template element or an editable-only element, don't delete
+        if (active.data?.editable !== undefined) return;
+      }
       if (active.type === 'activeSelection') {
-        active.forEachObject(obj => canvasRef.current.remove(obj));
+        active.forEachObject(obj => {
+          // Skip locked template objects in group selection
+          if (obj.data?.editable === false) return;
+          canvasRef.current.remove(obj);
+        });
         canvasRef.current.discardActiveObject();
       } else {
         canvasRef.current.remove(active);

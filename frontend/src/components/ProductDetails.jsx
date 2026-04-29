@@ -2,7 +2,7 @@ import React, { useContext, useState } from 'react';
 import { DesignContext } from '../App';
 
 function ProductDetails() {
-  const { productColor, setProductColor, PRODUCT_COLORS, SIZES, sizesQuantities, setSizesQuantities } = useContext(DesignContext);
+  const { productColor, setProductColor, PRODUCT_COLORS, SIZES, sizesQuantities, setSizesQuantities, allowCustomColor } = useContext(DesignContext);
   const [showCustomColor, setShowCustomColor] = useState(false);
 
   const isLight = (hex) => {
@@ -36,16 +36,18 @@ function ProductDetails() {
               title={color.name}
             />
           ))}
-          <button
-            className={`cpd-product-color-btn cpd-btn-custom ${showCustomColor ? 'active' : ''}`}
-            onClick={() => setShowCustomColor(!showCustomColor)}
-            title="Custom Color"
-          >
-            +
-          </button>
+          {allowCustomColor && (
+            <button
+              className={`cpd-product-color-btn cpd-btn-custom ${showCustomColor ? 'active' : ''}`}
+              onClick={() => setShowCustomColor(!showCustomColor)}
+              title="Custom Color"
+            >
+              +
+            </button>
+          )}
         </div>
 
-        {showCustomColor && (
+        {allowCustomColor && showCustomColor && (
           <div className="cpd-custom-color-picker-wrap">
             <input
               type="color"
@@ -65,7 +67,7 @@ function ProductDetails() {
              const qty = sizesQuantities[size] || '';
              return (
                <div key={size} className="cpd-size-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '10px' }}>
-                 <span className="cpd-size-pill" style={{ width: '40px', textAlign: 'center' }}>{size}</span>
+                 <span style={{ display: 'inline-block', minWidth: '44px', padding: '6px 10px', textAlign: 'center', whiteSpace: 'nowrap', backgroundColor: '#13151f', border: '1px solid #3a3d52', color: '#e0e0e0', borderRadius: '8px', fontSize: '12px', fontWeight: '600' }}>{size}</span>
                  <input 
                    type="number" 
                    min="0" 
@@ -78,7 +80,7 @@ function ProductDetails() {
                      else delete newSizes[size];
                      setSizesQuantities(newSizes);
                    }}
-                   style={{ width: '60px', padding: '4px 8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                   style={{ width: '70px', padding: '6px 10px', borderRadius: '8px', border: '1px solid #3a3d52', backgroundColor: '#13151f', color: '#e0e0e0', fontSize: '13px', outline: 'none' }}
                  />
                </div>
              );

@@ -1,9 +1,9 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
-import { DesignContext, PRINT_AREAS } from '../App';
+import { DesignContext } from '../App';
 import { fabric } from 'fabric';
 
-const CANVAS_WIDTH  = 500;
-const CANVAS_HEIGHT = 600;
+const CANVAS_WIDTH  = 1200;
+const CANVAS_HEIGHT = 1440;
 
 const FONTS = [
   'Inter', 'Roboto', 'Open Sans', 'Montserrat', 'Poppins', 'Oswald',
@@ -49,7 +49,7 @@ function addCurvedTextToCanvas(canvas, text, options) {
       originX: 'center', originY: 'center',
       angle: rotation,
       fontFamily: fontFamily || 'Inter',
-      fontSize: fontSize || 30,
+      fontSize: fontSize || 60,
       fill: fill || '#ffffff',
       fontWeight: fontWeight || 'normal',
       fontStyle: fontStyle || 'normal',
@@ -80,27 +80,45 @@ function addCurvedTextToCanvas(canvas, text, options) {
   canvas.add(fabricGroup);
   canvas.setActiveObject(fabricGroup);
   canvas.renderAll();
+  return fabricGroup;
 }
+
+// Formatting Icons
+const Bold = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+    <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/>
+  </svg>
+);
+const Italic = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+    <line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/>
+  </svg>
+);
+const Underline = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+    <path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/>
+  </svg>
+);
 
 // Alignment Icons
 const AlignLeft = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
     <line x1="17" y1="10" x2="3" y2="10" /><line x1="21" y1="6" x2="3" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="17" y1="18" x2="3" y2="18" />
   </svg>
 );
 const AlignCenter = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="18" y1="10" x2="6" y2="10" /><line x1="21" y1="6" x2="3" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="18" y1="18" x2="6" y2="18" />
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+    <line x1="21" y1="10" x2="3" y2="10" /><line x1="17" y1="6" x2="7" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="17" y1="18" x2="7" y2="18" />
   </svg>
 );
 const AlignRight = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
     <line x1="21" y1="10" x2="7" y2="10" /><line x1="21" y1="6" x2="3" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="21" y1="18" x2="7" y2="18" />
   </svg>
 );
 
 export default function TextPanel() {
-  const { canvasRef, activeView, saveToHistory, incrementCustomizationCount } = useContext(DesignContext);
+  const { canvasRef, activeView, saveToHistory, incrementCustomizationCount, PRINT_AREAS } = useContext(DesignContext);
   const [text, setText] = useState('');
   const [font, setFont] = useState('Inter');
   const [fontSize, setFontSize] = useState(30);
@@ -113,6 +131,8 @@ export default function TextPanel() {
   const [curveAmount, setCurveAmount] = useState(100);
   const [letterSpacing, setLetterSpacing] = useState(0);
   const [selectedText, setSelectedText] = useState(null);
+  const [showCustomColor, setShowCustomColor] = useState(false);
+  const curvedObjectRef = useRef(null);
 
   // 1. Listen for canvas selection
   useEffect(() => {
@@ -177,7 +197,9 @@ export default function TextPanel() {
     if (!selectedText || !canvasRef.current) return;
     
     const canvas = canvasRef.current;
-    const area = PRINT_AREAS[activeView] || PRINT_AREAS.front;
+    const areaRaw = PRINT_AREAS[activeView] || PRINT_AREAS.front;
+    const area = Array.isArray(areaRaw) ? areaRaw[0] : areaRaw;
+    if (!area) return;
     const areaLeftPx = area.left * CANVAS_WIDTH;
     const areaWidthPx = area.width * CANVAS_WIDTH;
 
@@ -201,49 +223,57 @@ export default function TextPanel() {
     let madeChanges = false;
 
     if (curved) {
-      if (selectedText.data?.type === 'curved-text') {
-        if (
-          selectedText.data.originalText !== text ||
-          selectedText.data.curveAmount !== curveAmount ||
-          selectedText._objects[0]?.fontFamily !== font ||
-          selectedText._objects[0]?.fontSize !== fontSize ||
-          selectedText._objects[0]?.fill !== textColor ||
-          (selectedText._objects[0]?.fontWeight === 'bold') !== bold ||
-          (selectedText._objects[0]?.fontStyle === 'italic') !== italic ||
-          !!selectedText._objects[0]?.underline !== underline
-        ) {
-          const top = selectedText.top;
-          const left = selectedText.left;
-          canvas.remove(selectedText);
-          addCurvedTextToCanvas(canvas, text, {
-            fontFamily: font, fontSize, fill: textColor,
-            fontWeight: bold ? 'bold' : 'normal',
-            fontStyle: italic ? 'italic' : 'normal',
-            underline, charSpacing: letterSpacing, curveAmount,
-            left, top
-          });
-          madeChanges = true;
+      // 1. Identify what to remove
+      let toRemove = null;
+      if (curvedObjectRef.current) toRemove = curvedObjectRef.current;
+      else if (selectedText) {
+        if (selectedText.data?.type === 'curved-text' || selectedText.type === 'i-text') {
+           toRemove = selectedText;
         }
-      } else if (selectedText.type === 'i-text') {
-        const top = selectedText.top;
-        const left = selectedText.left;
-        canvas.remove(selectedText);
-        addCurvedTextToCanvas(canvas, text, {
+      }
+
+      // 2. Only update if something changed
+      if (toRemove) {
+        const isGroup = toRemove.data?.type === 'curved-text';
+        const isIText = toRemove.type === 'i-text';
+
+        // Check for meaningful changes to avoid flicker/loop
+        const firstChar = isGroup ? toRemove._objects[0] : toRemove;
+        if (!firstChar) return;
+
+        if (
+          (isGroup && toRemove.data.originalText === text && toRemove.data.curveAmount === curveAmount &&
+           firstChar.fontFamily === font && firstChar.fontSize === fontSize && firstChar.fill === textColor &&
+           (firstChar.fontWeight === 'bold') === bold && (firstChar.fontStyle === 'italic') === italic && !!firstChar.underline === underline) ||
+          (isIText && !curved) // Should not happen in this block
+        ) {
+           return; 
+        }
+
+        const top = toRemove.top;
+        const left = toRemove.left;
+        canvas.remove(toRemove);
+        
+        const newObj = addCurvedTextToCanvas(canvas, text, {
           fontFamily: font, fontSize, fill: textColor,
           fontWeight: bold ? 'bold' : 'normal',
           fontStyle: italic ? 'italic' : 'normal',
           underline, charSpacing: letterSpacing, curveAmount,
           left, top
         });
+        curvedObjectRef.current = newObj;
         madeChanges = true;
       }
     } else {
-      if (selectedText.type === 'group' && selectedText.data?.type === 'curved-text') {
+      if (selectedText && selectedText.data?.type === 'curved-text') {
         const top = selectedText.top;
-        const left = selectedText.left + selectedText.width / 2;
+        const left = selectedText.left;
         canvas.remove(selectedText);
-        const textObj = new fabric.IText(text, {
+        curvedObjectRef.current = null;
+
+        const textObj = new fabric.Textbox(text, {
           left, top, originX: 'center', originY: 'center',
+          width: 300,
           fontFamily: font, fontSize, fill: textColor,
           fontWeight: bold ? 'bold' : 'normal',
           fontStyle: italic ? 'italic' : 'normal',
@@ -254,7 +284,7 @@ export default function TextPanel() {
         canvas.add(textObj);
         canvas.setActiveObject(textObj);
         madeChanges = true;
-      } else {
+      } else if (selectedText) {
         selectedText.set({
           text: text,
           fontFamily: font,
@@ -280,7 +310,9 @@ export default function TextPanel() {
   const handleAddText = () => {
     if (!text.trim() || !canvasRef.current) return;
     const canvas = canvasRef.current;
-    const area = PRINT_AREAS[activeView] || PRINT_AREAS.front;
+    const areaRaw = PRINT_AREAS[activeView] || PRINT_AREAS.front;
+    const area = Array.isArray(areaRaw) ? areaRaw[0] : areaRaw;
+    if (!area) return;
 
     const areaLeftPx   = area.left   * CANVAS_WIDTH;
     const areaTopPx    = area.top    * CANVAS_HEIGHT;
@@ -302,9 +334,10 @@ export default function TextPanel() {
         left: posX, top: centerY,
       });
     } else {
-      const textObj = new fabric.IText(text, {
+      const textObj = new fabric.Textbox(text, {
         left: posX, top: centerY,
         originX: 'center', originY: 'center',
+        width: 300,
         fontFamily: font, fontSize: fontSize, fill: textColor,
         fontWeight: bold ? 'bold' : 'normal',
         fontStyle: italic ? 'italic' : 'normal',
@@ -325,6 +358,8 @@ export default function TextPanel() {
     if (!canvasRef.current) return;
     const obj = canvasRef.current.getActiveObject();
     if (obj) {
+      // Don't delete template objects
+      if (obj.data?.editable !== undefined) return;
       canvasRef.current.remove(obj);
       canvasRef.current.renderAll();
       setSelectedText(null);
@@ -382,24 +417,47 @@ export default function TextPanel() {
           />
         </div>
 
-        {/* Format & Alignment */}
-        <div className="cpd-text-row-group">
-          <div className="cpd-text-tool-group" style={{ flex: 1 }}>
-            <label>Format</label>
-            <div className="cpd-text-format-row">
-              <button className={`cpd-format-btn ${bold ? 'active' : ''}`} onClick={() => setBold(!bold)} title="Bold" style={{ fontWeight: 'bold' }}>B</button>
-              <button className={`cpd-format-btn ${italic ? 'active' : ''}`} onClick={() => setItalic(!italic)} title="Italic" style={{ fontStyle: 'italic' }}>I</button>
-              <button className={`cpd-format-btn ${underline ? 'active' : ''}`} onClick={() => setUnderline(!underline)} title="Underline" style={{ textDecoration: 'underline' }}>U</button>
-            </div>
+        {/* Format */}
+        <div className="cpd-text-tool-group">
+          <label>Format</label>
+          <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+            <button 
+              onClick={() => setBold(!bold)} 
+              title="Bold"
+              style={{ flex: '1', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: bold ? '#4361ee' : 'transparent', border: '1.5px solid #4a4d6e', borderRadius: '8px', cursor: 'pointer', color: '#ffffff', fontSize: '15px', fontWeight: '800', fontFamily: 'serif', padding: '0' }}
+            >B</button>
+            <button 
+              onClick={() => setItalic(!italic)} 
+              title="Italic"
+              style={{ flex: '1', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: italic ? '#4361ee' : 'transparent', border: '1.5px solid #4a4d6e', borderRadius: '8px', cursor: 'pointer', color: '#ffffff', fontSize: '15px', fontWeight: '600', fontStyle: 'italic', fontFamily: 'serif', padding: '0' }}
+            >I</button>
+            <button 
+              onClick={() => setUnderline(!underline)} 
+              title="Underline"
+              style={{ flex: '1', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: underline ? '#4361ee' : 'transparent', border: '1.5px solid #4a4d6e', borderRadius: '8px', cursor: 'pointer', color: '#ffffff', fontSize: '15px', fontWeight: '600', textDecoration: 'underline', fontFamily: 'serif', padding: '0' }}
+            >U</button>
           </div>
+        </div>
 
-          <div className="cpd-text-tool-group" style={{ flex: 1 }}>
-            <label>Alignment</label>
-            <div className="cpd-text-align-row">
-              <button className={`cpd-format-btn ${textAlign === 'left' ? 'active' : ''}`} onClick={() => handleAlignmentChange('left')} title="Align Left"><AlignLeft /></button>
-              <button className={`cpd-format-btn ${textAlign === 'center' ? 'active' : ''}`} onClick={() => handleAlignmentChange('center')} title="Align Center"><AlignCenter /></button>
-              <button className={`cpd-format-btn ${textAlign === 'right' ? 'active' : ''}`} onClick={() => handleAlignmentChange('right')} title="Align Right"><AlignRight /></button>
-            </div>
+        {/* Alignment */}
+        <div className="cpd-text-tool-group">
+          <label>Alignment</label>
+          <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+            <button 
+              onClick={() => handleAlignmentChange('left')} 
+              title="Align Left"
+              style={{ flex: '1', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: textAlign === 'left' ? '#4361ee' : 'transparent', border: '1.5px solid #4a4d6e', borderRadius: '8px', cursor: 'pointer', color: '#ffffff', fontSize: '16px', padding: '0' }}
+            >☰</button>
+            <button 
+              onClick={() => handleAlignmentChange('center')} 
+              title="Align Center"
+              style={{ flex: '1', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: textAlign === 'center' ? '#4361ee' : 'transparent', border: '1.5px solid #4a4d6e', borderRadius: '8px', cursor: 'pointer', color: '#ffffff', fontSize: '16px', padding: '0' }}
+            >≡</button>
+            <button 
+              onClick={() => handleAlignmentChange('right')} 
+              title="Align Right"
+              style={{ flex: '1', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: textAlign === 'right' ? '#4361ee' : 'transparent', border: '1.5px solid #4a4d6e', borderRadius: '8px', cursor: 'pointer', color: '#ffffff', fontSize: '16px', padding: '0' }}
+            >☰</button>
           </div>
         </div>
 
@@ -416,17 +474,27 @@ export default function TextPanel() {
                   onClick={() => setTextColor(color)}
                 />
               ))}
+              <button
+                className={`cpd-color-swatch cpd-btn-custom ${showCustomColor ? 'active' : ''}`}
+                onClick={() => setShowCustomColor(!showCustomColor)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}
+                title="Custom Color"
+              >
+                +
+              </button>
             </div>
-            <div className="cpd-custom-color-wrap">
-              <input
-                type="color"
-                value={textColor}
-                onChange={e => setTextColor(e.target.value)}
-                title="Custom color"
-                className="cpd-color-custom-input"
-              />
-              <span>Custom</span>
-            </div>
+            {showCustomColor && (
+              <div className="cpd-custom-color-picker-wrap">
+                <input
+                  type="color"
+                  value={textColor}
+                  onChange={e => setTextColor(e.target.value)}
+                  title="Custom color"
+                  className="cpd-color-custom-input"
+                />
+                <span>Pick Custom Hex</span>
+              </div>
+            )}
           </div>
         </div>
 

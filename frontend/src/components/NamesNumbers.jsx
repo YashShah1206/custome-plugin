@@ -1,6 +1,7 @@
 import React, { useContext, useState } from 'react';
-import { DesignContext, PRINT_AREAS } from '../App';
+import { DesignContext } from '../App';
 import { fabric } from 'fabric';
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from './CanvasArea';
 
 const NAME_FONTS = ['Inter', 'Montserrat', 'Bebas Neue', 'Anton', 'Oswald', 'Bangers', 'Lobster', 'Righteous'];
 
@@ -8,7 +9,7 @@ export default function NamesNumbers() {
   const {
     namesConfig, setNamesConfig, namesNumbers, setNamesNumbers,
     SIZES, canvasRef, setActiveView, activeView, saveToHistory,
-    incrementCustomizationCount, canvasStates, setCanvasStates,
+    incrementCustomizationCount, canvasStates, setCanvasStates, PRINT_AREAS,
   } = useContext(DesignContext);
   const [step, setStep] = useState(1);
   const [applied, setApplied] = useState(false);
@@ -35,7 +36,7 @@ export default function NamesNumbers() {
 
     // We'll directly add to the current view — user should switch to the correct side first
     // or we switch for them
-    const targetSide = namesConfig.addNames ? nameSide : numberSide;
+    const targetSide = namesConfig.addNames ? (nameSide === 'sleeve' ? activeView : nameSide) : (numberSide === 'sleeve' ? activeView : numberSide);
 
     // Switch to the target side
     if (activeView !== targetSide) {
@@ -45,14 +46,24 @@ export default function NamesNumbers() {
     setTimeout(() => {
       if (!canvasRef.current) return;
       const cv = canvasRef.current;
-      const area = PRINT_AREAS[targetSide] || PRINT_AREAS.front;
-      const centerX = area.left + area.width / 2;
+      const areaRaw = PRINT_AREAS[targetSide] || PRINT_AREAS.front;
+      const area = Array.isArray(areaRaw) ? areaRaw[0] : areaRaw;
+      if (!area) return;
+      
+      // Convert percentage coordinates to pixels
+      const pxLeft = area.left * CANVAS_WIDTH;
+      const pxTop = area.top * CANVAS_HEIGHT;
+      const pxWidth = area.width * CANVAS_WIDTH;
+      const pxHeight = area.height * CANVAS_HEIGHT;
+      
+      const centerX = pxLeft + pxWidth / 2;
 
       namesNumbers.forEach((row, idx) => {
-        let yOffset = area.top + 40 + idx * 60;
+        // Start 20% down the print area
+        let yOffset = pxTop + (pxHeight * 0.2) + idx * 80;
 
         if (namesConfig.addNames && row.name) {
-          const nameObj = new fabric.IText(row.name, {
+          const nameObj = new fabric.IText(row.name.toUpperCase(), {
             left: centerX,
             top: yOffset,
             originX: 'center',
@@ -69,13 +80,19 @@ export default function NamesNumbers() {
             borderColor: '#4361ee',
             data: { type: 'name', rowIndex: idx },
           });
+          
+          // Basic scaling if too wide for the box
+          if (nameObj.width > pxWidth - 20) {
+            nameObj.scaleToWidth(pxWidth - 20);
+          }
+          
           cv.add(nameObj);
         }
 
         if (namesConfig.addNumbers && row.number) {
           const numObj = new fabric.IText(row.number, {
             left: centerX,
-            top: yOffset + (namesConfig.addNames && row.name ? 30 : 0),
+            top: yOffset + (namesConfig.addNames && row.name ? 40 : 0),
             originX: 'center',
             originY: 'center',
             fontFamily: 'Bebas Neue',
@@ -90,13 +107,19 @@ export default function NamesNumbers() {
             borderColor: '#4361ee',
             data: { type: 'number', rowIndex: idx },
           });
+
+          // Basic scaling if too wide for the box
+          if (numObj.width > pxWidth - 20) {
+            numObj.scaleToWidth(pxWidth - 20);
+          }
+
           cv.add(numObj);
         }
       });
 
       cv.renderAll();
       saveToHistory();
-    }, 200);
+    }, 300);
 
     setApplied(true);
     incrementCustomizationCount?.();
@@ -210,7 +233,6 @@ export default function NamesNumbers() {
                   <th>#</th>
                   {namesConfig.addNames && <th>Name</th>}
                   {namesConfig.addNumbers && <th>Number</th>}
-                  <th>Size</th>
                   <th></th>
                 </tr>
               </thead>
@@ -230,12 +252,6 @@ export default function NamesNumbers() {
                           value={row.number} onChange={(e) => updateRow(idx, 'number', e.target.value)} />
                       </td>
                     )}
-                    <td>
-                      <select className="cpd-nn-select" value={row.size}
-                        onChange={(e) => updateRow(idx, 'size', e.target.value)}>
-                        {SIZES.map(s => <option key={s}>{s}</option>)}
-                      </select>
-                    </td>
                     <td>
                       <button className="cpd-nn-remove-btn" onClick={() => removeRow(idx)}>✕</button>
                     </td>

@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 
 const VIEWS = ['front', 'back', 'rightSleeve', 'leftSleeve'];
 
-function ViewLabel(v) {
-  return { front: 'Front', back: 'Back', rightSleeve: 'R. Sleeve', leftSleeve: 'L. Sleeve' }[v] || v;
+function ViewLabel(v, categoryId) {
+  const isCap = categoryId === 'cap';
+  if (v === 'rightSleeve') return isCap ? 'Right' : 'R. Sleeve';
+  if (v === 'leftSleeve') return isCap ? 'Left' : 'L. Sleeve';
+  return { front: 'Front', back: 'Back' }[v] || v;
 }
 
 // Realistic product SVG for detail view
@@ -108,9 +111,15 @@ function ProductView({ product, category, color, view }) {
   );
 }
 
-export default function ProductDetail({ product, category, onStartDesigning, onBack }) {
+export default function ProductDetail({ product, category, availableColors, availableSizes, onStartDesigning, onBack }) {
   const [activeView, setActiveView] = useState('front');
-  const [selectedColor, setSelectedColor] = useState(product.colors[0]);
+  
+  // Use availableColors if provided, otherwise fallback to product colors
+  const displayColors = (availableColors && availableColors.length > 0) 
+    ? availableColors.map(c => c.hex) 
+    : (product.colors || []);
+    
+  const [selectedColor, setSelectedColor] = useState(displayColors[0] || '#ffffff');
   const [qty, setQty] = useState(1);
 
   return (
@@ -138,7 +147,7 @@ export default function ProductDetail({ product, category, onStartDesigning, onB
                 <div className="cpd-detail-thumb-img">
                   <ProductView product={product} category={category} color={selectedColor} view={v} />
                 </div>
-                <span>{ViewLabel(v)}</span>
+                <span>{ViewLabel(v, category?.id)}</span>
               </button>
             ))}
           </div>
@@ -146,7 +155,7 @@ export default function ProductDetail({ product, category, onStartDesigning, onB
           {/* Main image */}
           <div className="cpd-detail-main-img">
             <ProductView product={product} category={category} color={selectedColor} view={activeView} />
-            <div className="cpd-detail-view-label">{ViewLabel(activeView)} View</div>
+            <div className="cpd-detail-view-label">{ViewLabel(activeView, category?.id)} View</div>
           </div>
         </div>
 
@@ -174,11 +183,11 @@ export default function ProductDetail({ product, category, onStartDesigning, onB
           <div className="cpd-detail-section">
             <h3>Colors: <span className="cpd-detail-color-name">{selectedColor}</span></h3>
             <div className="cpd-detail-colors">
-              {product.colors.map((c, i) => (
+              {displayColors.map((c, i) => (
                 <button
                   key={i}
                   className={`cpd-detail-color-btn ${selectedColor === c ? 'active' : ''}`}
-                  style={{ background: c, border: c === '#ffffff' ? '2px solid #ddd' : '2px solid transparent' }}
+                  style={{ background: c, border: c.toLowerCase() === '#ffffff' ? '2px solid #ddd' : '2px solid transparent' }}
                   onClick={() => setSelectedColor(c)}
                   title={c}
                 />
@@ -187,7 +196,7 @@ export default function ProductDetail({ product, category, onStartDesigning, onB
           </div>
 
           <div className="cpd-detail-section">
-            <h3>Sizes: YS – 5XL</h3>
+            <h3>Sizes: {availableSizes && availableSizes.length > 0 ? availableSizes.join(', ') : 'YS – 5XL'}</h3>
             <p className="cpd-detail-min">Minimum Quantity: 1</p>
           </div>
 
@@ -216,7 +225,7 @@ export default function ProductDetail({ product, category, onStartDesigning, onB
             <h3>About this product</h3>
             <p>
               The <strong>{product.name}</strong> is a premium quality garment from <strong>{product.brand}</strong>.
-              Perfect for custom printing with vibrant, long-lasting colors. Available in {product.colors.length} colors
+              Perfect for custom printing with vibrant, long-lasting colors. Available in {displayColors.length} colors
               and multiple sizes. No minimum order required — order as few as 1 or as many as you need.
             </p>
             <ul>

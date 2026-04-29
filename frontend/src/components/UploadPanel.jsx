@@ -1,12 +1,12 @@
 import React, { useContext, useRef, useState } from 'react';
-import { DesignContext, PRINT_AREAS } from '../App';
+import { DesignContext } from '../App';
 import { fabric } from 'fabric';
 
-const CANVAS_WIDTH  = 500;
-const CANVAS_HEIGHT = 600;
+const CANVAS_WIDTH  = 1200;
+const CANVAS_HEIGHT = 1440;
 
 function UploadPanel() {
-  const { canvasRef, activeView, saveToHistory, incrementCustomizationCount } = useContext(DesignContext);
+  const { canvasRef, activeView, saveToHistory, incrementCustomizationCount, PRINT_AREAS, PRICING_RULES, selectedProduct } = useContext(DesignContext);
   const fileInputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [recentUploads, setRecentUploads] = useState([]);
@@ -54,7 +54,9 @@ function UploadPanel() {
 
   const addImageToCanvas = (imageUrl, wpUrl) => {
     if (!canvasRef.current) return;
-    const area = PRINT_AREAS[activeView] || PRINT_AREAS.front;
+    const areaRaw = PRINT_AREAS[activeView] || PRINT_AREAS.front;
+    const area = Array.isArray(areaRaw) ? areaRaw[0] : areaRaw;
+    if (!area) return;
 
     // Convert ratio-based PRINT_AREAS to pixel coordinates
     const areaLeftPx   = area.left   * CANVAS_WIDTH;
@@ -86,6 +88,7 @@ function UploadPanel() {
         borderColor: '#4361ee',
         hasControls: true,
         hasBorders: true,
+        imageSmoothing: true,
         data: { type: 'uploaded-image', wpUrl: wpUrl || null },
       });
 
@@ -162,6 +165,61 @@ function UploadPanel() {
           <line x1="12" y1="8" x2="12.01" y2="8" />
         </svg>
         <span>Vector or high resolution artwork of 300 DPI or more will look the best. Max size of 20 MB.</span>
+      </div>
+
+      {/* Pricing Information Highlight */}
+      <div className="cpd-pricing-note" style={{
+        marginTop: '20px', 
+        padding: '15px', 
+        backgroundColor: '#e6f0ff', 
+        border: '1px solid #4361ee', 
+        borderRadius: '8px',
+        color: '#1b2a4a',
+        fontSize: '13px',
+        lineHeight: '1.6'
+      }}>
+        <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4361ee" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          Pricing Information
+        </h4>
+        <p style={{ margin: '0 0 8px 0' }}>
+          <strong>Base Price:</strong> ${Number(selectedProduct?.price || 0).toFixed(2)} / item
+        </p>
+
+        {PRICING_RULES?.views && Object.entries(PRICING_RULES.views).some(([k,v]) => parseFloat(v) > 0) && (
+          <div style={{ marginBottom: '8px' }}>
+            <strong>Design Charges:</strong>
+            <ul style={{ margin: '4px 0 0 20px', padding: 0 }}>
+              {Object.entries(PRICING_RULES.views).map(([view, price]) => {
+                const val = parseFloat(price);
+                if (val > 0) {
+                  const label = view === 'leftSleeve' ? 'Left Sleeve' : (view === 'rightSleeve' ? 'Right Sleeve' : (view.charAt(0).toUpperCase() + view.slice(1)));
+                  return <li key={view}>{label}: <strong>+${val.toFixed(2)}</strong></li>;
+                }
+                return null;
+              })}
+            </ul>
+          </div>
+        )}
+
+        {PRICING_RULES?.sizes && PRICING_RULES.sizes.length > 0 && (
+          <div>
+            <strong>Size Upcharges:</strong>
+            <ul style={{ margin: '4px 0 0 20px', padding: 0 }}>
+              {PRICING_RULES.sizes.map((rule, idx) => {
+                const val = parseFloat(rule.price);
+                if (val > 0) {
+                  return <li key={idx}>Size {rule.size.toUpperCase()}: <strong>+${val.toFixed(2)}</strong></li>;
+                }
+                return null;
+              })}
+            </ul>
+          </div>
+        )}
       </div>
 
       {recentUploads.length > 0 && (

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, createContext } from 'react';
+import React, { useState, useRef, useCallback, createContext, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import CanvasArea from './components/CanvasArea';
 import Toolbar from './components/Toolbar';
@@ -10,7 +10,7 @@ import ProductDetail from './components/ProductDetail';
 
 export const DesignContext = createContext();
 
-const PRODUCT_COLORS = [
+const DEFAULT_PRODUCT_COLORS = [
   { name: 'White', hex: '#ffffff' },
   { name: 'Black', hex: '#1a1a1a' },
   { name: 'Dark Heather', hex: '#4a4a4a' },
@@ -39,48 +39,153 @@ const SIZES = ['YS', 'YM', 'YL', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'
 //   leftSleeve: { left: 110, top: 120, width: 120, height: 200 },
 // };
 // Canvas is 500×600 — update ratios accordingly
-const BASE_CANVAS_WIDTH = 500;
-const BASE_CANVAS_HEIGHT = 600;
+const BASE_CANVAS_WIDTH = 1200;
+const BASE_CANVAS_HEIGHT = 1440;
+const DISPLAY_WIDTH = 500;
+const DISPLAY_HEIGHT = 600;
 
-export const PRINT_AREAS = {
+const DEFAULT_PRINT_AREAS = {
   // Front chest area — centered horizontally, just below collar
-  front: {
-    left: 146 / BASE_CANVAS_WIDTH,   // 0.28
-    top: 133 / BASE_CANVAS_HEIGHT,  // 0.242
-    width: 210 / BASE_CANVAS_WIDTH,   // 0.44
-    height: 335 / BASE_CANVAS_HEIGHT,  // 0.425
-  },
+  front: [{
+    left: 155 / 500,
+    top: 175 / 600,
+    width: 190 / 500,
+    height: 295 / 600,
+  }],
   // Back — same width/position, can start a little higher (no collar bump)
-  back: {
-    left: 146 / BASE_CANVAS_WIDTH,   // 0.28
-    top: 133 / BASE_CANVAS_HEIGHT,  // 0.242
-    width: 210 / BASE_CANVAS_WIDTH,   // 0.44
-    height: 335 / BASE_CANVAS_HEIGHT,  // 0.425
-  },
+  back: [{
+    left: 153 / 500,
+    top: 138 / 600,
+    width: 200 / 500,
+    height: 325 / 600,
+  }],
   // Right sleeve — upper arm printable zone in the side-view mockup
-  rightSleeve: {
-    left: 215 / BASE_CANVAS_WIDTH,    // move to left side
-    top: 155 / BASE_CANVAS_HEIGHT,
-    width: 75 / BASE_CANVAS_WIDTH,
-    height: 105 / BASE_CANVAS_HEIGHT,
-  },
+  rightSleeve: [{
+    left: 215 / 500,
+    top: 155 / 600,
+    width: 75 / 500,
+    height: 105 / 600,
+  }],
 
   // ✅ Left sleeve (mirror of right)
-  leftSleeve: {
-    left: 230 / BASE_CANVAS_WIDTH,    // move to left side
-    top: 155 / BASE_CANVAS_HEIGHT,
-    width: 75 / BASE_CANVAS_WIDTH,
-    height: 105 / BASE_CANVAS_HEIGHT,
-  },
+  leftSleeve: [{
+    left: 230 / 500,
+    top: 155 / 600,
+    width: 75 / 500,
+    height: 105 / 600,
+  }],
+};
+
+const DEFAULT_CAP_PRINT_AREAS = {
+  front: [{
+    left: 120 / 500,
+    top: 195 / 600,
+    width: 260 / 500,
+    height: 150 / 600,
+  }],
+  back: [{
+    left: 165 / 500,
+    top: 160 / 600,
+    width: 180 / 500,
+    height: 100 / 600,
+  }],
+  rightSleeve: [{
+    left: 125 / 500,
+    top: 250 / 600,
+    width: 120 / 500,
+    height: 85 / 600,
+  }],
+  leftSleeve: [{
+    left: 125 / 500,
+    top: 250 / 600,
+    width: 120 / 500,
+    height: 85 / 600,
+  }],
 };
 
 
 
 
 
-export function calcPrice(itemCount, basePrice = 25) {
-  // Return basePrice without any increments for artwork/images
-  return basePrice;
+export function getCustomizedViews(canvasStates) {
+  const views = [];
+  if (!canvasStates) return views;
+  Object.keys(canvasStates).forEach(view => {
+    const stateStr = canvasStates[view];
+    if (stateStr) {
+      try {
+        const state = typeof stateStr === 'string' ? JSON.parse(stateStr) : stateStr;
+        if (state && state.objects) {
+          const hasUserObj = state.objects.some(obj => {
+             return obj.data?.type !== 'clip-path' && obj.data?.type !== 'print-area' && obj.className !== 'cpd-print-bounds';
+          });
+          if (hasUserObj) views.push(view);
+        }
+      } catch (e) {}
+    }
+  });
+  return views;
+}
+
+export function calcPrice(basePrice = 0, pricingRules = {}, sizesQuantities = {}, customizedViews = [], activeTemplateId = null) {
+  let total = 0;
+  let itemBase = parseFloat(basePrice) || 0;
+  
+  const breakdown = {
+    basePrice: itemBase,
+    views: {},
+    template: 0,
+    sizes: {},
+    totalQty: 0,
+    itemBase: 0
+  };
+  
+  if (pricingRules && pricingRules.views) {
+    customizedViews.forEach(view => {
+      const upcharge = parseFloat(pricingRules.views[view]);
+      if (!isNaN(upcharge) && upcharge > 0) {
+        itemBase += upcharge;
+        breakdown.views[view] = upcharge;
+      }
+    });
+  }
+
+  if (activeTemplateId && pricingRules && pricingRules.template_upcharge) {
+    const templateUpcharge = parseFloat(pricingRules.template_upcharge);
+    if (!isNaN(templateUpcharge) && templateUpcharge > 0) {
+      itemBase += templateUpcharge;
+      breakdown.template = templateUpcharge;
+    }
+  }
+
+  breakdown.itemBase = itemBase;
+
+  const sq = sizesQuantities || {};
+  let totalQty = 0;
+  
+  Object.keys(sq).forEach(size => {
+    const qty = parseInt(sq[size]) || 0;
+    if (qty > 0) {
+      totalQty += qty;
+      let sizeUpcharge = 0;
+      if (pricingRules && pricingRules.sizes) {
+        const rule = pricingRules.sizes.find(r => r.size.trim().toLowerCase() === size.trim().toLowerCase());
+        if (rule && !isNaN(parseFloat(rule.price))) {
+          sizeUpcharge = parseFloat(rule.price);
+        }
+      }
+      breakdown.sizes[size] = { qty, upcharge: sizeUpcharge, unitTotal: itemBase + sizeUpcharge, total: (itemBase + sizeUpcharge) * qty };
+      total += (itemBase + sizeUpcharge) * qty;
+    }
+  });
+
+  breakdown.totalQty = totalQty;
+
+  if (totalQty === 0) {
+    return { total: itemBase, breakdown };
+  }
+
+  return { total, breakdown };
 }
 
 function App() {
@@ -107,10 +212,11 @@ function App() {
         id: data.productId,
         name: data.productName || 'Custom Product',
         price: data.productPrice ? Number(data.productPrice) : 25,
+        category: { id: data.productCategory || 'short-sleeve' },
         brand: '',
         rating: 5,
         reviews: 0,
-        colors: [PRODUCT_COLORS[6].hex] // default
+        colors: [DEFAULT_PRODUCT_COLORS[0].hex] // default
       };
     }
     return null;
@@ -119,16 +225,111 @@ function App() {
   // Designer state
   const [activePanel, setActivePanel] = useState('upload');
   const [activeView, setActiveView] = useState('front');
-  const [productColor, setProductColor] = useState(PRODUCT_COLORS[6]);
+  const [availableColors, setAvailableColors] = useState(DEFAULT_PRODUCT_COLORS);
+  const [productColor, setProductColor] = useState(DEFAULT_PRODUCT_COLORS[0]);
+  const isWordPress = typeof window.cpdData !== 'undefined';
+  const isCapMode = isWordPress ? (window.cpdData?.productCategory === 'cap') : true;
 
-  // Per-view canvas states (JSON strings)
+  const [availableSizes, setAvailableSizes] = useState(SIZES);
+  const [printAreas, setPrintAreas] = useState(isCapMode ? DEFAULT_CAP_PRINT_AREAS : DEFAULT_PRINT_AREAS);
+  const [artLibrary, setArtLibrary] = useState([]);
+  const [showDefaultArt, setShowDefaultArt] = useState(true);
+  const [allowCustomColor, setAllowCustomColor] = useState(true);
+  const [fullConfig, setFullConfig] = useState(null);
+  const [pricingRules, setPricingRules] = useState({ views: {}, sizes: [] });
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const checkedTemplatesForSession = useRef(false);
+
+  useEffect(() => {
+    if (screen === 'designer' && selectedProduct?.id && !checkedTemplatesForSession.current) {
+      checkedTemplatesForSession.current = true;
+      const checkTpl = async () => {
+        try {
+          const response = await fetch(`${window.cpdData.restUrl}templates?product_id=${selectedProduct.id}`, {
+            headers: { 'X-WP-Nonce': window.cpdData.nonce }
+          });
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setActivePanel('templates');
+            setIsTemplateModalOpen(true);
+          }
+        } catch (err) {}
+      };
+      checkTpl();
+    }
+  }, [screen, selectedProduct]);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const productId = window.cpdData.productId || 0;
+        const response = await fetch(`${window.cpdData.restUrl}config?product_id=${productId}&cb=${Date.now()}`, {
+          headers: { 'X-WP-Nonce': window.cpdData.nonce }
+        });
+        const data = await response.json();
+        setFullConfig(data);
+
+        if (data.showDefaultArt !== undefined) {
+          setShowDefaultArt(data.showDefaultArt);
+        }
+        const customAreas = data.printAreas;
+        const defaultAreas = isCapMode ? DEFAULT_CAP_PRINT_AREAS : DEFAULT_PRINT_AREAS;
+
+        if (customAreas && Object.keys(customAreas).length > 0) {
+          setPrintAreas({ ...defaultAreas, ...customAreas });
+        } else {
+          setPrintAreas(defaultAreas);
+        }
+
+        if (data.pricing) {
+          setPricingRules(data.pricing);
+        }
+
+        if (data.productMockups) {
+          const availableViews = Object.keys(data.productMockups);
+          if (availableViews.length > 0 && !availableViews.includes('front')) {
+            setActiveView(availableViews[0]);
+          }
+        }
+      } catch (err) {
+      }
+    };
+
+    const fetchArtLibrary = async () => {
+      try {
+        const response = await fetch(`${window.cpdData.restUrl}art-library`, {
+          headers: { 'X-WP-Nonce': window.cpdData.nonce }
+        });
+        const data = await response.json();
+        setArtLibrary(data || []);
+      } catch (err) {
+      }
+    };
+
+    if (window.cpdData) {
+      fetchConfig();
+      fetchArtLibrary();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!fullConfig) return;
+    setAvailableColors(fullConfig.colors && fullConfig.colors.length > 0 ? fullConfig.colors : DEFAULT_PRODUCT_COLORS);
+    setAvailableSizes(fullConfig.sizes && fullConfig.sizes.length > 0 ? fullConfig.sizes : SIZES);
+    if (fullConfig.colors && fullConfig.colors.length > 0) {
+      setProductColor(fullConfig.colors[0]);
+    } else {
+      setProductColor(DEFAULT_PRODUCT_COLORS[0]);
+    }
+    setAllowCustomColor(fullConfig.allowCustomColor);
+  }, [fullConfig]);
+
   const [canvasStates, setCanvasStates] = useState({
     front: null, back: null, rightSleeve: null, leftSleeve: null,
   });
   const canvasStatesRef = useRef({
     front: null, back: null, rightSleeve: null, leftSleeve: null,
   });
-  // Per-view thumbnails for 3D decal
   const [canvasThumbnails, setCanvasThumbnails] = useState({
     front: null, back: null, rightSleeve: null, leftSleeve: null,
   });
@@ -145,10 +346,11 @@ function App() {
   const [sizesQuantities, setSizesQuantities] = useState({});
   const [customerNotes, setCustomerNotes] = useState('');
 
+  const [activeTemplateId, setActiveTemplateId] = useState(null);
+
   const [customizationCount, setCustomizationCount] = useState(0);
   const canvasRef = useRef(null);
 
-  // Per-view history
   const [histories, setHistories] = useState({
     front: [], back: [], rightSleeve: [], leftSleeve: [],
   });
@@ -156,18 +358,38 @@ function App() {
     front: -1, back: -1, rightSleeve: -1, leftSleeve: -1,
   });
 
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(1.2);
+
+  // Effective zoom = user zoom state * mockup boost (if applicable)
+  const mockupBoost = fullConfig?.productMockups ? 1.4 : 1.0;
+  // Account for the fact that base logical resolution (1200) is already 2.4x the display size (500)
+  const baseScale = DISPLAY_WIDTH / BASE_CANVAS_WIDTH; // 0.4166...
+  const effectiveZoom = zoom * mockupBoost * baseScale;
+
   const activeViewRef = useRef('front');
   activeViewRef.current = activeView;
 
-  // Generate a thumbnail (for 3D decal) from the current canvas
+  const isSubmitting = useRef(false);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isSubmitting.current || screen !== 'designer') return;
+      if (customizationCount > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [screen, customizationCount]);
+
   const generateThumbnail = useCallback(() => {
     if (!canvasRef.current) return;
-    const thumb = canvasRef.current.toDataURL({ format: 'png', multiplier: 1 });
+    const thumb = canvasRef.current.toDataURL({ format: 'png', multiplier: 2 });
     setCanvasThumbnails(prev => ({ ...prev, [activeViewRef.current]: thumb }));
   }, []);
 
-  // Save current canvas state to history
   const saveToHistory = useCallback(() => {
     if (!canvasRef.current) return;
     const json = JSON.stringify(canvasRef.current.toJSON(['data']));
@@ -183,11 +405,9 @@ function App() {
       [view]: (prev[view] ?? -1) + 1,
     }));
 
-    // Save canvas state for this view
     canvasStatesRef.current[view] = json;
     setCanvasStates(prev => ({ ...prev, [view]: json }));
 
-    // Generate the thumbnail for 3D
     generateThumbnail();
   }, [generateThumbnail]);
 
@@ -195,7 +415,6 @@ function App() {
     setCustomizationCount(prev => prev + 1);
   }, []);
 
-  // Switch view with state save/restore
   const switchView = useCallback((newView) => {
     return new Promise((resolve) => {
       if (!canvasRef.current) {
@@ -206,20 +425,16 @@ function App() {
       const canvas = canvasRef.current;
       const currentView = activeViewRef.current;
 
-      // Save current canvas state
       const currentJson = JSON.stringify(canvas.toJSON(['data']));
       canvasStatesRef.current[currentView] = currentJson;
       setCanvasStates(prev => ({ ...prev, [currentView]: currentJson }));
 
-      // Generate thumbnail for current view before switching
       const thumb = canvas.toDataURL({ format: 'png', multiplier: 1 });
       setCanvasThumbnails(prev => ({ ...prev, [currentView]: thumb }));
 
-      // Activate new view (Instantly update Ref to prevent race conditions)
       activeViewRef.current = newView;
       setActiveView(newView);
 
-      // Restore the new view's state (on next tick so React updates activeView)
       setTimeout(() => {
         if (!canvasRef.current) {
           resolve();
@@ -228,8 +443,69 @@ function App() {
         const targetState = canvasStatesRef.current[newView];
         if (targetState) {
           canvasRef.current.loadFromJSON(JSON.parse(targetState), () => {
+            // Re-apply template locks after loading from JSON
+            if (activeTemplateId) {
+              const toConvert = [];
+              canvasRef.current.getObjects().forEach(obj => {
+                if (obj.data?.editable === true && (obj.type === 'i-text' || obj.type === 'text')) {
+                  toConvert.push(obj);
+                }
+              });
+
+              toConvert.forEach(obj => {
+                const visualWidth = obj.width * obj.scaleX;
+                const trueScale = obj.scaleY || 1;
+                const newWidth = visualWidth / trueScale;
+
+                const tb = new fabric.Textbox(obj.text, {
+                  ...obj.toObject(),
+                  type: 'textbox',
+                  width: newWidth,
+                  scaleX: trueScale,
+                  scaleY: trueScale,
+                  splitByGrapheme: false,
+                });
+                tb.data = obj.data;
+                canvasRef.current.remove(obj);
+                canvasRef.current.add(tb);
+              });
+
+              canvasRef.current.getObjects().forEach(obj => {
+                if (obj.data?.editable === true) {
+                  const isText = (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox');
+                  const isImage = (obj.type === 'image');
+                  obj.set({
+                    selectable: true, evented: true,
+                    hasControls: false, hasBorders: true,
+                    lockMovementX: true, lockMovementY: true,
+                    lockScalingX: true, lockScalingY: true,
+                    lockRotation: true, lockScalingFlip: true,
+                    lockSkewingX: true, lockSkewingY: true,
+                    moveCursor: 'not-allowed',
+                    borderColor: '#22c55e', cornerColor: '#22c55e',
+                    borderScaleFactor: 2,
+                    hoverCursor: isText ? 'text' : (isImage ? 'pointer' : 'not-allowed'),
+                  });
+                  if (isText) obj.set({ editable: true });
+                  if (isImage && !obj.data._origDisplayW) {
+                    obj.data._origDisplayW = obj.width * obj.scaleX;
+                    obj.data._origDisplayH = obj.height * obj.scaleY;
+                  }
+                } else if (obj.data?.type !== 'clip-path' && obj.data?.type !== 'print-area') {
+                  obj.set({
+                    selectable: false, evented: false,
+                    hasControls: false, hasBorders: false,
+                    lockMovementX: true, lockMovementY: true,
+                    hoverCursor: 'default',
+                  });
+                }
+              });
+            }
             canvasRef.current.renderAll();
-            // Generate thumbnail for restored view
+            // Store originals for hard position enforcement
+            if (canvasRef.current._storeTemplateOriginals) {
+              canvasRef.current._storeTemplateOriginals();
+            }
             const t = canvasRef.current.toDataURL({ format: 'png', multiplier: 1 });
             setCanvasThumbnails(prev => ({ ...prev, [newView]: t }));
             resolve();
@@ -242,9 +518,8 @@ function App() {
         }
       }, 50);
     });
-  }, []);
+  }, [activeTemplateId]);
 
-  // Undo for current view
   const undo = useCallback(() => {
     const view = activeViewRef.current;
     const idx = historyIndexes[view];
@@ -258,7 +533,6 @@ function App() {
     }
   }, [histories, historyIndexes, generateThumbnail]);
 
-  // Redo for current view
   const redo = useCallback(() => {
     const view = activeViewRef.current;
     const idx = historyIndexes[view];
@@ -272,16 +546,19 @@ function App() {
     }
   }, [histories, historyIndexes, generateThumbnail]);
 
-  // Clear all objects on current view
   const clearAll = useCallback(() => {
     if (!canvasRef.current) return;
+    // Clear template position enforcement
+    if (canvasRef.current._templateOriginals) {
+      canvasRef.current._templateOriginals.clear();
+    }
     canvasRef.current.clear();
     canvasRef.current.backgroundColor = 'transparent';
     canvasRef.current.renderAll();
+    setActiveTemplateId(null);
     saveToHistory();
   }, [saveToHistory]);
 
-  // Navigation handlers
   const handleSelectCategory = (cat) => {
     setSelectedCategory(cat);
     setScreen('list');
@@ -294,8 +571,8 @@ function App() {
 
   const handleStartDesigning = (product, cat, color) => {
     setSelectedProduct({ ...product, category: cat });
-    const matching = PRODUCT_COLORS.find(c => c.hex.toLowerCase() === color.toLowerCase());
-    setProductColor(matching || { name: 'Custom', hex: color });
+    const matching = availableColors.find(c => c.hex.toLowerCase() === color.toLowerCase());
+    setProductColor(matching || { name: 'Selected', hex: color });
     setCustomizationCount(0);
     setActivePanel('upload');
     setActiveView('front');
@@ -322,14 +599,21 @@ function App() {
     historyIndex: historyIndexes[activeView] ?? -1,
     historyLength: histories[activeView]?.length ?? 0,
     zoom, setZoom,
-    PRODUCT_COLORS, SIZES, PRINT_AREAS,
+    PRODUCT_COLORS: availableColors, SIZES: availableSizes, PRINT_AREAS: printAreas, PRICING_RULES: pricingRules,
+    artLibrary, showDefaultArt, allowCustomColor,
     sizesQuantities, setSizesQuantities,
     customerNotes, setCustomerNotes,
     customizationCount, setCustomizationCount,
     incrementCustomizationCount,
+    getCustomizedViews,
+    calcPrice,
     selectedProduct, selectedCategory,
     screen, setScreen,
     generateThumbnail,
+    isSubmitting,
+    fullConfig, effectiveZoom,
+    activeTemplateId, setActiveTemplateId,
+    isTemplateModalOpen, setIsTemplateModalOpen,
   };
 
   return (
@@ -355,6 +639,8 @@ function App() {
           <ProductDetail
             product={selectedProduct}
             category={selectedProduct.category}
+            availableColors={availableColors}
+            availableSizes={availableSizes}
             onStartDesigning={handleStartDesigning}
             onBack={(to) => setScreen(to === 'list' ? 'list' : 'catalog')}
           />
