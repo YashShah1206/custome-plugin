@@ -77,6 +77,11 @@ class CPD_Woo_Hooks {
                 color: #fff !important;
             }
         </style>';
+        // If user is not logged in, redirect them to the WooCommerce My Account page
+        if (!is_user_logged_in()) {
+            $designer_page_url = wc_get_page_permalink('myaccount');
+        }
+
         echo '<a href="' . esc_url($designer_page_url) . '" class="cpd-start-design-btn">🎨 Start Designing Now</a>';
         echo '</div>';
     }

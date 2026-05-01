@@ -3,9 +3,8 @@ import React, { useState } from 'react';
 const VIEWS = ['front', 'back', 'rightSleeve', 'leftSleeve'];
 
 function ViewLabel(v, categoryId) {
-  const isCap = categoryId === 'cap';
-  if (v === 'rightSleeve') return isCap ? 'Right' : 'R. Sleeve';
-  if (v === 'leftSleeve') return isCap ? 'Left' : 'L. Sleeve';
+  if (v === 'rightSleeve') return 'Right';
+  if (v === 'leftSleeve') return 'Left';
   return { front: 'Front', back: 'Back' }[v] || v;
 }
 

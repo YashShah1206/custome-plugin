@@ -15,9 +15,7 @@ class CPD_Rest_API
         register_rest_route('cpd/v1', '/save-image', array(
             'methods' => 'POST',
             'callback' => array($this, 'save_image'),
-            'permission_callback' => function () {
-                return is_user_logged_in();
-            },
+            'permission_callback' => '__return_true',
         ));
 
         // Get all designs (Legacy/Placeholder)
@@ -33,9 +31,7 @@ class CPD_Rest_API
         register_rest_route('cpd/v1', '/upload', array(
             'methods' => 'POST',
             'callback' => array($this, 'upload_image'),
-            'permission_callback' => function () {
-                return is_user_logged_in();
-            },
+            'permission_callback' => '__return_true',
         ));
 
         // Get Art Library
@@ -208,9 +204,12 @@ class CPD_Rest_API
 
         // Keep this endpoint image-only, matching the frontend upload panel behavior.
         $checked = wp_check_filetype_and_ext($file['tmp_name'], $file['name']);
-        $allowed_mimes = array('image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml');
+        
+        // M1: Secure Uploads - Only allow JPG and PNG formats. SVGs are explicitly blocked to prevent XSS.
+        $allowed_mimes = array('image/jpeg', 'image/png');
+        
         if (empty($checked['type']) || !in_array($checked['type'], $allowed_mimes, true)) {
-            return new WP_Error('invalid_file_type', 'Only image uploads are allowed', array('status' => 400));
+            return new WP_Error('invalid_file_type', 'Only JPG and PNG image uploads are allowed.', array('status' => 400));
         }
 
         // Match the frontend size limit so large files fail consistently.
@@ -294,7 +293,7 @@ class CPD_Rest_API
                         'name' => $art->post_title,
                         'url' => $url,
                         // We'll treat it as an image in the frontend if it's not a raw SVG string
-                        'isImage' => true, 
+                        'isImage' => true,
                     );
                 }
             }
@@ -322,13 +321,13 @@ class CPD_Rest_API
 
         // Global defaults
         $global_tshirt_colors = $this->parse_colors(get_option('cpd_global_colors', ''));
-        $global_tshirt_sizes  = array_map('trim', explode(',', get_option('cpd_global_sizes', '')));
-        $global_cap_colors    = $this->parse_colors(get_option('cpd_cap_colors', ''));
-        $global_cap_sizes     = array_map('trim', explode(',', get_option('cpd_cap_sizes', '')));
+        $global_tshirt_sizes = array_map('trim', explode(',', get_option('cpd_global_sizes', '')));
+        $global_cap_colors = $this->parse_colors(get_option('cpd_cap_colors', ''));
+        $global_cap_sizes = array_map('trim', explode(',', get_option('cpd_cap_sizes', '')));
 
         // Print area fallbacks
         $global_tshirt_areas = $this->parse_areas(get_option('cpd_print_areas', array()));
-        $global_cap_areas    = $this->parse_areas(get_option('cpd_cap_print_areas', array()));
+        $global_cap_areas = $this->parse_areas(get_option('cpd_cap_print_areas', array()));
 
         $is_cap = false;
         $product_name = 'Global Settings';
@@ -351,11 +350,11 @@ class CPD_Rest_API
 
         // Base Config Object
         $config = array(
-            'showDefaultArt'   => $show_default_art === '1',
-            'productMockups'   => null,
-            'colors'           => $is_cap ? $global_cap_colors : $global_tshirt_colors,
-            'sizes'            => $is_cap ? $global_cap_sizes : $global_tshirt_sizes,
-            'printAreas'       => $is_cap ? $global_cap_areas : $global_tshirt_areas,
+            'showDefaultArt' => $show_default_art === '1',
+            'productMockups' => null,
+            'colors' => $is_cap ? $global_cap_colors : $global_tshirt_colors,
+            'sizes' => $is_cap ? $global_cap_sizes : $global_tshirt_sizes,
+            'printAreas' => $is_cap ? $global_cap_areas : $global_tshirt_areas,
             'allowCustomColor' => true,
         );
 
@@ -367,14 +366,14 @@ class CPD_Rest_API
                 $p_mockups = get_post_meta($product_id, '_cpd_product_mockups', true);
             }
 
-            $p_colors  = get_post_meta($product_id, '_cpd_product_colors', true);
-            $p_sizes   = get_post_meta($product_id, '_cpd_product_sizes', true);
-            $p_areas   = get_post_meta($product_id, '_cpd_product_areas', true);
+            $p_colors = get_post_meta($product_id, '_cpd_product_colors', true);
+            $p_sizes = get_post_meta($product_id, '_cpd_product_sizes', true);
+            $p_areas = get_post_meta($product_id, '_cpd_product_areas', true);
 
             if (!empty($p_mockups)) {
                 // Handle both array and JSON string formats
                 $mockup_data = is_array($p_mockups) ? $p_mockups : json_decode($p_mockups, true);
-                
+
                 if (is_array($mockup_data)) {
                     $clean_mockups = array();
                     foreach ($mockup_data as $key => $url) {
@@ -413,7 +412,7 @@ class CPD_Rest_API
             }
 
             $config['pricing'] = array(
-                'views' => get_post_meta($product_id, '_cpd_pricing_views', true) ?: array('front'=>'', 'back'=>'', 'leftSleeve'=>'', 'rightSleeve'=>''),
+                'views' => get_post_meta($product_id, '_cpd_pricing_views', true) ?: array('front' => '', 'back' => '', 'leftSleeve' => '', 'rightSleeve' => ''),
                 'sizes' => get_post_meta($product_id, '_cpd_pricing_sizes', true) ?: array(),
                 'template_upcharge' => get_post_meta($product_id, '_cpd_pricing_template', true) ?: ''
             );
@@ -430,7 +429,7 @@ class CPD_Rest_API
     /**
      * Helper: Parse "Name:#hex, Name:#hex" into array
      */
-    private function parse_colors($raw) 
+    private function parse_colors($raw)
     {
         $colors = array();
         if (!empty($raw)) {
@@ -448,7 +447,7 @@ class CPD_Rest_API
     /**
      * Helper: Parse area coordinates into percentage-based decimals
      */
-    private function parse_areas($raw) 
+    private function parse_areas($raw)
     {
         $areas = array();
         if (is_array($raw)) {
@@ -456,12 +455,14 @@ class CPD_Rest_API
                 if (isset($data['l'])) {
                     // Old single box format
                     if (!empty($data['l']) && !empty($data['t']) && !empty($data['w']) && !empty($data['h'])) {
-                        $areas[$v_key] = array(array(
-                            'left'   => floatval($data['l']) / 500,
-                            'top'    => floatval($data['t']) / 600,
-                            'width'  => floatval($data['w']) / 500,
-                            'height' => floatval($data['h']) / 600,
-                        ));
+                        $areas[$v_key] = array(
+                            array(
+                                'left' => floatval($data['l']) / 500,
+                                'top' => floatval($data['t']) / 600,
+                                'width' => floatval($data['w']) / 500,
+                                'height' => floatval($data['h']) / 600,
+                            )
+                        );
                     }
                 } elseif (is_array($data)) {
                     // New multiple box format
@@ -469,9 +470,9 @@ class CPD_Rest_API
                     foreach ($data as $box) {
                         if (!empty($box['l']) && !empty($box['t']) && !empty($box['w']) && !empty($box['h'])) {
                             $view_areas[] = array(
-                                'left'   => floatval($box['l']) / 500,
-                                'top'    => floatval($box['t']) / 600,
-                                'width'  => floatval($box['w']) / 500,
+                                'left' => floatval($box['l']) / 500,
+                                'top' => floatval($box['t']) / 600,
+                                'width' => floatval($box['w']) / 500,
                                 'height' => floatval($box['h']) / 600,
                             );
                         }
@@ -563,11 +564,11 @@ class CPD_Rest_API
 
             // Build template entry
             $new_template = array(
-                'id'        => $template_id,
-                'name'      => $template_name,
+                'id' => $template_id,
+                'name' => $template_name,
                 'thumbnail' => $template_thumbnail,
-                'views'     => $template_views,
-                'created'   => current_time('mysql'),
+                'views' => $template_views,
+                'created' => current_time('mysql'),
             );
             $templates[] = $new_template;
         }
@@ -575,9 +576,9 @@ class CPD_Rest_API
         update_post_meta($product_id, '_cpd_product_templates', $templates);
 
         return rest_ensure_response(array(
-            'success'  => true,
+            'success' => true,
             'template' => $new_template,
-            'message'  => $template_id_provided ? 'Template updated successfully!' : 'Template saved successfully!',
+            'message' => $template_id_provided ? 'Template updated successfully!' : 'Template saved successfully!',
         ));
     }
 

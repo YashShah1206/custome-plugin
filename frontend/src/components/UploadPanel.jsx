@@ -197,7 +197,7 @@ function UploadPanel() {
               {Object.entries(PRICING_RULES.views).map(([view, price]) => {
                 const val = parseFloat(price);
                 if (val > 0) {
-                  const label = view === 'leftSleeve' ? 'Left Sleeve' : (view === 'rightSleeve' ? 'Right Sleeve' : (view.charAt(0).toUpperCase() + view.slice(1)));
+                  const label = view === 'leftSleeve' ? 'Left' : (view === 'rightSleeve' ? 'Right' : (view.charAt(0).toUpperCase() + view.slice(1)));
                   return <li key={view}>{label}: <strong>+${val.toFixed(2)}</strong></li>;
                 }
                 return null;

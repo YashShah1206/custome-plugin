@@ -10,14 +10,12 @@ const views = [
 
 function getViewLabel(view, isCap, fullConfig) {
   if (fullConfig?.viewLabels && fullConfig.viewLabels[view.id]) {
-    return fullConfig.viewLabels[view.id];
+    let label = fullConfig.viewLabels[view.id];
+    return label.replace(/\s*\/?\s*Sleeve/gi, '');
   }
   if (view.id === 'front') return 'Front';
   if (view.id === 'back') return 'Back';
-  if (isCap) {
-    return view.id === 'rightSleeve' ? 'Right' : 'Left';
-  }
-  return view.id === 'rightSleeve' ? 'R. Sleeve' : 'L. Sleeve';
+  return view.id === 'rightSleeve' ? 'Right' : 'Left';
 }
 
 export default function ViewSwitcher() {

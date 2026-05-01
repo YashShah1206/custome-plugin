@@ -735,8 +735,8 @@ class CPD_Admin
         $views = array(
             'front' => 'Front View',
             'back'  => 'Back View',
-            'rightSleeve' => 'Right View / Sleeve',
-            'leftSleeve'  => 'Left View / Sleeve'
+            'rightSleeve' => 'Right View',
+            'leftSleeve'  => 'Left View'
         );
         ?>
         <style>
@@ -928,8 +928,8 @@ class CPD_Admin
             const views = {
                 front: 'Front View',
                 back: 'Back View',
-                rightSleeve: 'Right View / Sleeve',
-                leftSleeve: 'Left View / Sleeve'
+                rightSleeve: 'Right View',
+                leftSleeve: 'Left View'
             };
 
             function renderManualTable() {
